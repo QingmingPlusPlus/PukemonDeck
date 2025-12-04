@@ -15,11 +15,15 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   try {
     // GET /api/dict - 获取 dict 表所有数据
     if (route === 'dict' && request.method === 'GET') {
-      const result = await env.DB.prepare('SELECT * FROM dict').all();
+      const stmt = env.DB.prepare(`
+        SELECT * FROM dicts;
+      `);
+      const result = await stmt.all();
+      const tables = result.results ?? [];
       
       return new Response(JSON.stringify({
         status: 'success',
-        data: result.results
+        tables
       }), {
         headers: { 'Content-Type': 'application/json' }
       });

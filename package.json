@@ -4,7 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "wrangler pages dev ",
+    "deploy": "wrangler pages deploy"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.2.4",
