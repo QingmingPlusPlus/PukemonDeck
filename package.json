@@ -4,15 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "wrangler pages dev --proxy=http://127.0.0.1:5173 --compatibility-date=2024-12-04",
-    "dev:vite": "vite --host 127.0.0.1",
-    "dev:full": "start cmd /c \"npm run dev:vite\" && timeout /t 3 && npm run dev",
-    "build": "tsc -b && vite build",
-    "lint": "eslint .",
-    "preview": "vite preview",
-    "deploy": "npm run build && wrangler pages deploy dist"
+    
   },
   "dependencies": {
+    "@radix-ui/react-slot": "^1.2.4",
     "@tailwindcss/vite": "^4.1.17",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
