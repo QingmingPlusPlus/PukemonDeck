@@ -1,0 +1,21 @@
+# Cloudflare Pages 项目配置
+name = "pukemon-deck"
+compatibility_date = "2024-12-04"
+
+# Pages 配置
+pages_build_output_dir = "dist"
+
+# D1 数据库绑定
+[[d1_databases]]
+binding = "DB"  # 在代码中通过 env.DB 访问
+database_name = "pukemon-deck-db"
+database_id = "7f9346dd-1a37-4c00-a93d-d4af4330d309"
+
+# R2 存储桶绑定
+[[r2_buckets]]
+binding = "BUCKET"  # 在代码中通过 env.BUCKET 访问
+bucket_name = "pukemon"
+
+# 环境变量（可选）
+[vars]
+ENVIRONMENT = "production"
