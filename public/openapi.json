@@ -1,0 +1,203 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "PukemonDeck API",
+    "version": "1.0.0",
+    "description": "PukemonDeck 项目 API 接口文档",
+    "contact": {
+      "name": "API Support"
+    }
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "当前服务器"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Dict",
+      "description": "字典数据接口"
+    },
+    {
+      "name": "Images",
+      "description": "图片资源接口"
+    }
+  ],
+  "components": {
+    "schemas": {
+      "Dict": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "主键 ID"
+          },
+          "raw_id": {
+            "type": "integer",
+            "description": "原始 ID"
+          },
+          "typeCode": {
+            "type": "string",
+            "description": "类型代码"
+          },
+          "dictCode": {
+            "type": "string",
+            "description": "字典代码"
+          },
+          "dictValue": {
+            "type": "string",
+            "description": "字典值"
+          },
+          "dictSort": {
+            "type": "integer",
+            "description": "排序"
+          },
+          "status": {
+            "type": "integer",
+            "description": "状态"
+          }
+        }
+      },
+      "ApiSuccessResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "success"
+          },
+          "tables": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Dict"
+            }
+          }
+        }
+      },
+      "ApiErrorResponse": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "错误类型"
+          },
+          "message": {
+            "type": "string",
+            "description": "错误信息"
+          }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/api/dict": {
+      "get": {
+        "summary": "获取字典数据",
+        "description": "获取 dicts 表中的所有字典数据",
+        "tags": [
+          "Dict"
+        ],
+        "responses": {
+          "200": {
+            "description": "成功返回字典数据列表",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiSuccessResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "服务器内部错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/images/{key}": {
+      "get": {
+        "summary": "获取图片",
+        "description": "从 R2 存储中获取指定路径的图片资源",
+        "tags": [
+          "Images"
+        ],
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "description": "图片路径（支持多级路径，如 folder/image.png）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功返回图片",
+            "content": {
+              "image/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "缺少图片路径参数",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Missing image key"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "图片不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Image not found"
+                    },
+                    "key": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "服务器内部错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
