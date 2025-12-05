@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "wrangler pages dev ",
-    "deploy": "wrangler pages deploy"
+    "deploy": "wrangler pages deploy",
+    "db:create": "wrangler d1 execute pukemon --local --file database/create_tables.sql"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.2.4",
