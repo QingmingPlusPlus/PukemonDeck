@@ -4,3 +4,7 @@ out
 .DS_Store
 .eslintcache
 *.log*
+
+# 外部卡牌数据库：体积大，且每个版本整库替换，不纳入版本控制。
+/data/*
+!/data/README.md

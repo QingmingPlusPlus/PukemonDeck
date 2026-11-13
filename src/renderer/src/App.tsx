@@ -1,8 +1,35 @@
+import { useEffect, useState } from 'react'
 import Versions from './components/Versions'
+import MissingData from './components/MissingData'
 import electronLogo from './assets/electron.svg'
+import type { CardDatabaseStatus } from '../../shared/card-db'
 
 function App(): React.JSX.Element {
+  const [status, setStatus] = useState<CardDatabaseStatus | null>(null)
+  const [checking, setChecking] = useState(false)
+
+  useEffect(() => {
+    window.api.cardDb.status().then(setStatus)
+  }, [])
+
   const ipcHandle = (): void => window.electron.ipcRenderer.send('ping')
+
+  const handleReload = async (): Promise<void> => {
+    setChecking(true)
+    try {
+      setStatus(await window.api.cardDb.reload())
+    } finally {
+      setChecking(false)
+    }
+  }
+
+  if (!status) {
+    return <p className="tip">正在加载卡牌数据…</p>
+  }
+
+  if (!status.ok) {
+    return <MissingData status={status} checking={checking} onReload={handleReload} />
+  }
 
   return (
     <>

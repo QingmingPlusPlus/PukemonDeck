@@ -1,8 +1,14 @@
-import { contextBridge } from 'electron'
+import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
+import type { CardDatabaseApi } from '../shared/card-db'
 
 // Custom APIs for renderer
-const api = {}
+const api: { cardDb: CardDatabaseApi } = {
+  cardDb: {
+    status: () => ipcRenderer.invoke('card-db:status'),
+    reload: () => ipcRenderer.invoke('card-db:reload')
+  }
+}
 
 // Use `contextBridge` APIs to expose Electron APIs to
 // renderer only if context isolation is enabled, otherwise

@@ -2,46 +2,67 @@ import Database from 'better-sqlite3'
 import { app } from 'electron'
 import { existsSync, mkdirSync } from 'fs'
 import { join } from 'path'
+import type { CardDatabaseStatus } from '../shared/card-db'
 
 let cardDb: Database.Database | null = null
+let cardDbError: string | null = null
 let userDb: Database.Database | null = null
 
 /**
- * 运行时资源根目录。
- * - 开发/预览：仓库内的 resources/
- * - 打包后：安装目录下的 resources/（即 process.resourcesPath）
+ * 卡牌库路径（外部只读数据，整库替换，不做迁移）。
+ * - 开发/预览：项目根的 data/deck.db
+ * - 打包后：<resourcesPath>/db/deck.db（由 scripts/after-pack.cjs 拷贝）
  */
-function resourcesDir(): string {
-  return app.isPackaged ? process.resourcesPath : join(__dirname, '../../resources')
-}
-
-/** 随版本发布的只读卡牌数据库路径（整库替换，勿在运行时写入）。 */
 export function getCardDatabasePath(): string {
-  return join(resourcesDir(), 'db', 'deck.db')
+  if (app.isPackaged) {
+    return join(process.resourcesPath, 'db', 'deck.db')
+  }
+  return join(__dirname, '../../data/deck.db')
 }
 
 /**
- * 只读卡牌数据库连接。数据随应用版本整体替换，
- * 因此以 readonly 方式打开，避免误写以及并发锁问题。
+ * 打开只读卡牌库。失败时不抛异常，而是记录原因，
+ * 由渲染进程根据 getCardDatabaseStatus() 显示「缺失卡牌数据」提示页。
  */
-export function getCardDatabase(): Database.Database {
-  if (cardDb) return cardDb
+export function openCardDatabase(): CardDatabaseStatus {
+  closeCardDatabase()
 
-  const file = getCardDatabasePath()
-  if (!existsSync(file)) {
-    throw new Error(`卡牌数据库不存在：${file}`)
+  const path = getCardDatabasePath()
+  try {
+    if (!existsSync(path)) {
+      throw new Error('未找到卡牌数据库文件')
+    }
+
+    const db = new Database(path, { readonly: true, fileMustExist: true })
+    db.pragma('foreign_keys = ON')
+    db.pragma('query_only = ON')
+
+    cardDb = db
+    cardDbError = null
+  } catch (error) {
+    cardDbError = error instanceof Error ? error.message : String(error)
   }
 
-  cardDb = new Database(file, { readonly: true, fileMustExist: true })
-  cardDb.pragma('foreign_keys = ON')
-  cardDb.pragma('query_only = ON')
+  return getCardDatabaseStatus()
+}
 
+export function getCardDatabaseStatus(): CardDatabaseStatus {
+  return { ok: cardDb !== null, path: getCardDatabasePath(), error: cardDbError }
+}
+
+/**
+ * 查询入口。数据缺失时主动抛错，避免上层静默拿到空结果。
+ */
+export function getCardDatabase(): Database.Database {
+  if (!cardDb) {
+    throw new Error(cardDbError ?? `卡牌数据库未打开：${getCardDatabasePath()}`)
+  }
   return cardDb
 }
 
 /**
  * 用户数据数据库连接，位于每用户数据目录，可读写，
- * 升级应用时不会被覆盖。
+ * 升级应用或替换卡牌库时都不会被覆盖。
  */
 export function getUserDatabase(): Database.Database {
   if (userDb) return userDb
@@ -56,9 +77,13 @@ export function getUserDatabase(): Database.Database {
   return userDb
 }
 
-export function closeDatabases(): void {
+function closeCardDatabase(): void {
   cardDb?.close()
   cardDb = null
+}
+
+export function closeDatabases(): void {
+  closeCardDatabase()
   userDb?.close()
   userDb = null
 }

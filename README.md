@@ -40,19 +40,24 @@ npm run dev    # 启动开发模式（支持热更新）
 ```
 ├─ build/                  # 打包资源（图标、entitlements）
 ├─ resources/              # 应用运行时资源
-│  ├─ icon.png
-│  └─ db/
-│     └─ deck.db           # 只读卡牌数据库（随版本整库替换）
+│  └─ icon.png
+├─ data/                   # 外部数据（不入 git，不打包进 asar）
+│  ├─ README.md
+│  └─ deck.db              # 只读卡牌数据库，需手动放置
 ├─ docs/
 │  └─ db/
 │     └─ deck.sql          # 卡牌库建表语句（仅参考，不随应用打包）
+├─ scripts/
+│  └─ after-pack.cjs       # 打包后把 data/deck.db 拷入应用资源目录
 ├─ src/
 │  ├─ main/                # 主进程代码
-│  │  ├─ index.ts          # 应用入口、窗口创建
+│  │  ├─ index.ts          # 应用入口、窗口创建、IPC
 │  │  └─ db.ts             # SQLite 连接管理
 │  ├─ preload/             # 预加载脚本（安全地向渲染进程暴露 API）
 │  │  ├─ index.ts
 │  │  └─ index.d.ts
+│  ├─ shared/              # 主进程 / preload / 渲染进程共用的类型
+│  │  └─ card-db.ts
 │  └─ renderer/            # 渲染进程（React）
 │     ├─ index.html
 │     └─ src/
@@ -79,22 +84,47 @@ npm run dev    # 启动开发模式（支持热更新）
 
 应用使用两个互相独立的 SQLite 数据库：
 
-| 数据库                  | 位置                                                               | 访问方式 | 说明                                         |
-| ----------------------- | ------------------------------------------------------------------ | -------- | -------------------------------------------- |
-| 卡牌库 `deck.db`        | 开发：`resources/db/deck.db`<br>打包：`<resourcesPath>/db/deck.db` | 只读     | 随应用版本整库替换，运行时禁止写入           |
-| 用户库 `pukemondeck.db` | `app.getPath('userData')/data/`                                    | 读写     | 用户数据，升级应用时保留（当前版本暂未使用） |
+| 数据库                  | 位置                                                       | 访问方式 | 说明                                         |
+| ----------------------- | ---------------------------------------------------------- | -------- | -------------------------------------------- |
+| 卡牌库 `deck.db`        | 开发：`data/deck.db`<br>打包：`<resourcesPath>/db/deck.db` | 只读     | 外部数据，随版本整库替换，运行时禁止写入     |
+| 用户库 `pukemondeck.db` | `app.getPath('userData')/data/`                            | 读写     | 用户数据，升级应用时保留（当前版本暂未使用） |
 
-卡牌库通过 `electron-builder.yml` 的 `extraResources` 拷贝到 `asar` 之外，原因是
-`better-sqlite3` 属于原生模块，无法读取 `app.asar` 内的文件。连接代码见 `src/main/db.ts`：
+### 卡牌库（外部数据）
+
+`deck.db` 体积约 18 MB，且每个版本整体替换，因此**不纳入 git**（见 `.gitignore`），
+需要手动放到 `data/` 目录：
+
+```
+data/deck.db
+```
+
+- 开发时主进程直接读取 `data/deck.db`。
+- 打包时由 `scripts/after-pack.cjs`（electron-builder `afterPack` 钩子）拷贝到
+  `<resources>/db/deck.db`。该位置在 `app.asar` 之外，因为 `better-sqlite3`
+  属于原生模块，无法读取 asar 内的文件。
+- 若 `data/deck.db` 不存在，打包不会失败（安装包中不含卡牌数据），
+  应用启动后会显示「缺失卡牌数据」提示页。
+- 安装后也可以直接替换 `resources/db/deck.db` 来更新卡牌数据，无需重新打包。
+- 文件缺失或损坏时应用仍会正常启动，但会显示**「缺失卡牌数据」提示页**，
+  其中给出目标路径和「重新检测」按钮。
+
+连接代码见 `src/main/db.ts`：
 
 ```ts
-import { getCardDatabase, getUserDatabase } from './db'
+import { openCardDatabase, getCardDatabase, getUserDatabase } from './db'
 
-const cards = getCardDatabase() // 只读，随版本替换
+openCardDatabase() // 启动时尝试打开；失败只记录状态，不抛异常
+const cards = getCardDatabase() // 查询入口，未打开时抛错
 const user = getUserDatabase() // 可读写，持久保存在用户目录
 ```
 
-更新卡牌数据时，直接用新的 `deck.db` 覆盖 `resources/db/deck.db` 即可；
+渲染进程通过 preload 暴露的 `window.api.cardDb` 读取状态：
+
+```ts
+const status = await window.api.cardDb.status() // { ok, path, error }
+const next = await window.api.cardDb.reload() // 用户补上文件后重试
+```
+
 `docs/db/deck.sql` 仅作为表结构参考，不会被包含进安装包。
 
 ## 打包配置

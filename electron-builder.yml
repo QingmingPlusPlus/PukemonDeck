@@ -9,18 +9,17 @@ files:
   - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
-  # 卡牌数据库通过 extraResources 单独拷贝，避免被打进 asar。
-  - '!resources/db/**'
+  # 外部数据目录不进 asar，打包后由 scripts/after-pack.cjs 拷入应用资源目录。
+  - '!data/**'
   # 仅开发期参考文档，不随应用发布。
   - '!docs/**'
+  # 构建脚本，不需要随应用发布。
+  - '!scripts/**'
 asarUnpack:
   - 'resources/**'
   - '**/*.node'
-# 只读卡牌数据库：原生模块无法读取 asar 内的文件，必须放在 asar 之外。
-# 打包后位置：<resourcesPath>/db/deck.db
-extraResources:
-  - from: resources/db
-    to: db
+# 打包完成后把 data/deck.db 拷到 <resources>/db/deck.db（asar 之外，原生模块才能读取）。
+afterPack: scripts/after-pack.cjs
 win:
   executableName: pukemondeck
 nsis:

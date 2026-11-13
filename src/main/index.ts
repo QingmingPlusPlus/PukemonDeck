@@ -2,7 +2,7 @@ import { app, shell, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
-import { closeDatabases, getCardDatabase } from './db'
+import { closeDatabases, getCardDatabaseStatus, openCardDatabase } from './db'
 
 function createWindow(): void {
   // Create the browser window.
@@ -43,8 +43,12 @@ app.whenReady().then(() => {
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.pukemondeck.app')
 
-  // Open the read-only card database shipped with the app (fail fast if missing)
-  getCardDatabase()
+  // 打开只读卡牌库。缺失或损坏时不会中断启动，
+  // 渲染进程会通过 IPC 拿到状态并显示「缺失卡牌数据」提示页。
+  openCardDatabase()
+
+  ipcMain.handle('card-db:status', () => getCardDatabaseStatus())
+  ipcMain.handle('card-db:reload', () => openCardDatabase())
 
   // Default open or close DevTools by F12 in development
   // and ignore CommandOrControl + R in production.
