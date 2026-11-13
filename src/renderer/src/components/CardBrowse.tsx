@@ -208,13 +208,13 @@ function CardBrowse(): React.JSX.Element {
             </select>
           </label>
           <label className="browse__field">
-            <span>卡牌类型</span>
+            <span>卡牌类别</span>
             <select
-              value={filters.cardType ?? ''}
-              onChange={(event) => updateFilter('cardType', event.target.value || undefined)}
+              value={filters.category ?? ''}
+              onChange={(event) => updateFilter('category', event.target.value || undefined)}
             >
               <option value="">全部</option>
-              {options?.cardTypes.map((item) => (
+              {options?.categories.map((item) => (
                 <option key={item.code} value={item.code}>
                   {item.label}
                 </option>
@@ -229,6 +229,34 @@ function CardBrowse(): React.JSX.Element {
             >
               <option value="">全部</option>
               {options?.attributes.map((item) => (
+                <option key={item.code} value={item.code}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="browse__field">
+            <span>弱点</span>
+            <select
+              value={filters.weaknessType ?? ''}
+              onChange={(event) => updateFilter('weaknessType', event.target.value || undefined)}
+            >
+              <option value="">全部</option>
+              {options?.weaknessTypes.map((item) => (
+                <option key={item.code} value={item.code}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="browse__field">
+            <span>是否进化</span>
+            <select
+              value={filters.evolution ?? ''}
+              onChange={(event) => updateFilter('evolution', event.target.value || undefined)}
+            >
+              <option value="">全部</option>
+              {options?.evolutions.map((item) => (
                 <option key={item.code} value={item.code}>
                   {item.label}
                 </option>

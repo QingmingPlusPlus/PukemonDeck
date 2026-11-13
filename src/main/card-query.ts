@@ -115,8 +115,10 @@ export function getFilterOptions(): CardFilterOptions {
 
   return {
     series: loadDict('series'),
-    cardTypes: loadDict('card_type'),
+    categories: buildCategoryOptions(loadDict),
     attributes: loadDict('attribute'),
+    weaknessTypes: [{ code: 'none', label: '无弱点' }, ...loadDict('weakness_type')],
+    evolutions: buildEvolutionOptions(db, loadDict),
     pokemonTypes: loadDict('pokemon_type'),
     rarities: loadDict('rarity'),
     regulationMarks: loadDict('regulation_mark'),
@@ -309,13 +311,118 @@ export function sanitizeQuery(input: unknown): CardListQuery {
       keyword: optString(filters.keyword, 80),
       series: optString(filters.series, 16),
       collectionId: optInt(filters.collectionId),
-      cardType: optString(filters.cardType, 16),
+      category: optCategory(filters.category),
       attribute: optString(filters.attribute, 16),
+      weaknessType: optWeaknessType(filters.weaknessType),
+      evolution: optEvolution(filters.evolution),
       pokemonType: optString(filters.pokemonType, 16),
       rarity: optString(filters.rarity, 16),
       regulationMark: optString(filters.regulationMark, 16)
     }
   }
+}
+
+function buildCategoryOptions(loadDict: (typeCode: string) => DictOption[]): DictOption[] {
+  const options: DictOption[] = []
+  for (const item of loadDict('card_type')) {
+    options.push({ code: `card:${item.code}`, label: item.label })
+    if (item.code === '2') {
+      for (const trainer of loadDict('trainer_type')) {
+        if (!trainer.label.trim()) continue
+        options.push({ code: `trainer:${trainer.code}`, label: trainer.label })
+      }
+    }
+    if (item.code === '3') {
+      for (const energy of loadDict('energy_type')) {
+        options.push({ code: `energy:${energy.code}`, label: energy.label })
+      }
+    }
+  }
+  return options
+}
+
+function buildEvolutionOptions(
+  db: ReturnType<typeof getCardDatabase>,
+  loadDict: (typeCode: string) => DictOption[]
+): DictOption[] {
+  const options: DictOption[] = [
+    { code: 'basic', label: '未进化' },
+    { code: 'evolved', label: '已进化' }
+  ]
+  const seen = new Set(['基础'])
+  for (const item of loadDict('evolve')) {
+    if (seen.has(item.label)) continue
+    seen.add(item.label)
+    options.push({ code: `text:${item.label}`, label: item.label })
+  }
+  const extras = db
+    .prepare(
+      `SELECT DISTINCT evolve_text AS label
+       FROM ptcg_card
+       WHERE evolve_text IS NOT NULL AND evolve_text != ''
+       ORDER BY evolve_text`
+    )
+    .all() as { label: string }[]
+  for (const item of extras) {
+    if (seen.has(item.label)) continue
+    seen.add(item.label)
+    options.push({ code: `text:${item.label}`, label: item.label })
+  }
+  return options
+}
+
+function applyCategoryFilter(category: string, where: string[], params: unknown[]): void {
+  const [kind, code] = category.split(':')
+  if (kind === 'card') {
+    where.push('c.card_type = ?')
+    params.push(code)
+    return
+  }
+  if (kind === 'trainer') {
+    where.push('c.trainer_type = ?')
+    params.push(code)
+    return
+  }
+  if (kind === 'energy') {
+    where.push('c.energy_type = ?')
+    params.push(code)
+  }
+}
+
+function applyEvolutionFilter(evolution: string, where: string[], params: unknown[]): void {
+  if (evolution === 'basic') {
+    where.push(`c.evolve_text = '基础'`)
+    return
+  }
+  if (evolution === 'evolved') {
+    where.push(`c.evolve_text IS NOT NULL AND c.evolve_text != '' AND c.evolve_text != '基础'`)
+    return
+  }
+  if (evolution.startsWith('text:')) {
+    where.push('c.evolve_text = ?')
+    params.push(evolution.slice('text:'.length))
+  }
+}
+
+function optCategory(value: unknown): string | undefined {
+  const raw = optString(value, 24)
+  if (!raw) return undefined
+  return /^(card|trainer|energy):[A-Za-z0-9]+$/.test(raw) ? raw : undefined
+}
+
+function optWeaknessType(value: unknown): string | undefined {
+  const raw = optString(value, 16)
+  if (!raw) return undefined
+  if (raw === 'none' || /^\d+$/.test(raw)) return raw
+  return undefined
+}
+
+function optEvolution(value: unknown): string | undefined {
+  const raw = optString(value, 32)
+  if (!raw) return undefined
+  if (raw === 'basic' || raw === 'evolved') return raw
+  if (raw.startsWith('text:') && raw.length > 5) return raw
+  return undefined
 }
 
 function buildFilterClause(filters: CardFilters): { clause: string; params: unknown[] } {
@@ -337,13 +444,23 @@ function buildFilterClause(filters: CardFilters): { clause: string; params: unkn
     where.push('c.collection_id = ?')
     params.push(filters.collectionId)
   }
-  if (filters.cardType) {
-    where.push('c.card_type = ?')
-    params.push(filters.cardType)
+  if (filters.category) {
+    applyCategoryFilter(filters.category, where, params)
   }
   if (filters.attribute) {
     where.push('c.attribute = ?')
     params.push(filters.attribute)
+  }
+  if (filters.weaknessType) {
+    if (filters.weaknessType === 'none') {
+      where.push(`(c.weakness_type IS NULL OR c.weakness_type = '')`)
+    } else {
+      where.push('c.weakness_type = ?')
+      params.push(filters.weaknessType)
+    }
+  }
+  if (filters.evolution) {
+    applyEvolutionFilter(filters.evolution, where, params)
   }
   if (filters.pokemonType) {
     // pokemon_type 使用 | 连接多个编码，例如 1|2

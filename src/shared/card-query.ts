@@ -10,10 +10,21 @@ export interface CardFilters {
   series?: string
   /** 卡包（商品）ID */
   collectionId?: number
-  /** 卡牌类型编码：1 宝可梦 / 2 训练家 / 3 能量 */
-  cardType?: string
+  /**
+   * 卡牌类别。由 card_type / trainer_type / energy_type 组合而来：
+   * card:1 宝可梦、card:2 训练家、card:3 能量，
+   * trainer:1 物品 等，energy:1 基本能量 等。
+   */
+  category?: string
   /** 宝可梦属性编码（草、火、水等） */
   attribute?: string
+  /** 弱点属性编码；none 表示没有弱点 */
+  weaknessType?: string
+  /**
+   * 进化筛选：basic 未进化（基础）、evolved 已进化，
+   * text:1阶进化 等按 evolve_text 精确匹配。
+   */
+  evolution?: string
   /** 宝可梦种类编码（V、ex、VMAX 等，源字段可多值） */
   pokemonType?: string
   /** 稀有度编码 */
@@ -68,8 +79,11 @@ export interface CollectionOption {
 
 export interface CardFilterOptions {
   series: DictOption[]
-  cardTypes: DictOption[]
+  /** 卡牌类别：大类（宝可梦/训练家/能量）及训练家、能量子类 */
+  categories: DictOption[]
   attributes: DictOption[]
+  weaknessTypes: DictOption[]
+  evolutions: DictOption[]
   pokemonTypes: DictOption[]
   rarities: DictOption[]
   regulationMarks: DictOption[]
