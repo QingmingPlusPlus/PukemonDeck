@@ -84,29 +84,35 @@ npm run dev    # 启动开发模式（支持热更新）
 
 应用使用两个互相独立的 SQLite 数据库：
 
-| 数据库                  | 位置                                                       | 访问方式 | 说明                                         |
-| ----------------------- | ---------------------------------------------------------- | -------- | -------------------------------------------- |
-| 卡牌库 `deck.db`        | 开发：`data/deck.db`<br>打包：`<resourcesPath>/db/deck.db` | 只读     | 外部数据，随版本整库替换，运行时禁止写入     |
-| 用户库 `pukemondeck.db` | `app.getPath('userData')/data/`                            | 读写     | 用户数据，升级应用时保留（当前版本暂未使用） |
+| 数据库                  | 位置                                                                                                       | 访问方式 | 说明                                                         |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------ |
+| 卡牌库 `deck.db`        | 优先：`userData/data/deck.db`（用户导入）<br>否则：开发 `data/deck.db` / 打包 `<resourcesPath>/db/deck.db` | 只读     | 外部数据，打包时确定分发副本；用户导入的副本优先且跨重启保留 |
+| 用户库 `pukemondeck.db` | `app.getPath('userData')/data/`                                                                            | 读写     | 用户数据，升级应用时保留（当前版本暂未使用）                 |
 
 ### 卡牌库（外部数据）
 
-`deck.db` 体积约 18 MB，且每个版本整体替换，因此**不纳入 git**（见 `.gitignore`），
-需要手动放到 `data/` 目录：
+`deck.db` 体积约 18 MB，且每个版本整体替换，因此**不纳入 git**（见 `.gitignore`）。
+打包用的分发副本需要放到 `data/` 目录：
 
 ```
 data/deck.db
 ```
 
-- 开发时主进程直接读取 `data/deck.db`。
-- 打包时由 `scripts/after-pack.cjs`（electron-builder `afterPack` 钩子）拷贝到
+应用按以下顺序解析卡牌库，并以**只读**方式打开（不做迁移）：
+
+1. 用户导入的副本：`app.getPath('userData')/data/deck.db`。此文件在用户数据目录中，重启后仍然保留，也不会被应用升级覆盖。
+2. 随应用分发的副本：开发时读取项目根的 `data/deck.db`；打包后读取 `<resources>/db/deck.db`。
+
+- 打包时由 `scripts/after-pack.cjs`（electron-builder `afterPack` 钩子）把 `data/deck.db` 拷贝到
   `<resources>/db/deck.db`。该位置在 `app.asar` 之外，因为 `better-sqlite3`
   属于原生模块，无法读取 asar 内的文件。
-- 若 `data/deck.db` 不存在，打包不会失败（安装包中不含卡牌数据），
-  应用启动后会显示「缺失卡牌数据」提示页。
-- 安装后也可以直接替换 `resources/db/deck.db` 来更新卡牌数据，无需重新打包。
-- 文件缺失或损坏时应用仍会正常启动，但会显示**「缺失卡牌数据」提示页**，
-  其中给出目标路径和「重新检测」按钮。
+- 若 `data/deck.db` 不存在，打包不会失败（安装包中不含卡牌数据）。
+- 安装后也可以直接替换 `resources/db/deck.db` 来更新分发副本，无需重新打包。
+  若用户已经导入过自己的副本，导入副本仍然优先。
+- 两处副本都缺失或无法打开时，应用仍会正常启动，并显示**导入页**。
+  用户可以通过系统文件选择框或将 `.db` / `.sqlite` 文件拖入页面来导入卡牌数据。
+  导入前会校验文件是否为包含 `ptcg_card`、`ptcg_dict` 等核心表的 SQLite 数据库，
+  通过后复制到 `userData/data/deck.db`，无需重启即可进入主页。
 
 连接代码见 `src/main/db.ts`：
 
@@ -118,11 +124,12 @@ const cards = getCardDatabase() // 查询入口，未打开时抛错
 const user = getUserDatabase() // 可读写，持久保存在用户目录
 ```
 
-渲染进程通过 preload 暴露的 `window.api.cardDb` 读取状态：
+渲染进程通过 preload 暴露的 `window.api.cardDb` 读取状态并导入：
 
 ```ts
-const status = await window.api.cardDb.status() // { ok, path, error }
-const next = await window.api.cardDb.reload() // 用户补上文件后重试
+const status = await window.api.cardDb.status() // { ok, path, error, source }
+const next = await window.api.cardDb.pickAndImport() // 系统文件选择框
+const dropped = await window.api.cardDb.importFromPath(path) // 拖放导入
 ```
 
 `docs/db/deck.sql` 仅作为表结构参考，不会被包含进安装包。

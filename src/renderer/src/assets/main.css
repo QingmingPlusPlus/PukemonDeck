@@ -138,7 +138,7 @@ code {
   backdrop-filter: blur(24px);
 }
 
-.missing-data {
+.import-data {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -147,74 +147,71 @@ code {
   text-align: center;
 }
 
-.missing-data__title {
+.import-data__title {
   font-size: 24px;
   font-weight: 700;
   line-height: 1.4;
   margin-bottom: 12px;
 }
 
-.missing-data__desc {
+.import-data__desc {
   font-size: 15px;
   color: var(--ev-c-text-2);
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
-.missing-data__label {
-  font-size: 13px;
-  color: var(--ev-c-text-3);
-  margin-bottom: 6px;
-}
-
-.missing-data__path {
+.import-data__dropzone {
   width: 100%;
-  margin-bottom: 16px;
-  user-select: text;
-  word-break: break-all;
+  padding: 28px 24px;
+  border: 1px dashed var(--ev-c-gray-1);
+  border-radius: 16px;
+  background-color: var(--color-background-soft);
+  cursor: pointer;
+  transition:
+    border-color 200ms,
+    background-color 200ms;
 }
 
-.missing-data__path code {
-  display: inline-block;
-  padding: 8px 12px;
-  font-size: 13px;
-  line-height: 1.5;
+.import-data__dropzone:hover,
+.import-data__dropzone:focus-visible {
+  border-color: #6988e6;
+  outline: none;
 }
 
-.missing-data__error {
-  font-size: 13px;
-  color: #ff9a9a;
-  margin-bottom: 12px;
-  user-select: text;
-  word-break: break-all;
+.import-data__dropzone--dragging {
+  border-color: #6988e6;
+  border-style: solid;
+  background-color: var(--color-background-mute);
 }
 
-.missing-data__hint {
+.import-data__dropzone--disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.import-data__drop-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.import-data__drop-hint,
+.import-data__drop-types {
   font-size: 13px;
   color: var(--ev-c-text-2);
-  margin-bottom: 4px;
 }
 
-.missing-data__button {
-  margin-top: 20px;
-  cursor: pointer;
-  border: 1px solid transparent;
-  border-radius: 20px;
-  padding: 0 22px;
-  line-height: 38px;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--ev-button-alt-text);
-  background-color: var(--ev-button-alt-bg);
-  transition: background-color 200ms;
+.import-data__drop-types {
+  margin-top: 6px;
+  color: var(--ev-c-text-3);
 }
 
-.missing-data__button:hover:not(:disabled) {
-  background-color: var(--ev-button-alt-hover-bg);
-}
-
-.missing-data__button:disabled {
-  cursor: default;
-  opacity: 0.6;
+.import-data__error {
+  margin-top: 16px;
+  font-size: 13px;
+  color: #ff9a9a;
+  user-select: text;
+  word-break: break-all;
 }
 
 .versions li {

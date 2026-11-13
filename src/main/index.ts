@@ -2,7 +2,13 @@ import { app, shell, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
-import { closeDatabases, getCardDatabaseStatus, openCardDatabase } from './db'
+import {
+  closeDatabases,
+  getCardDatabaseStatus,
+  importCardDatabase,
+  openCardDatabase,
+  pickAndImportCardDatabase
+} from './db'
 
 function createWindow(): void {
   // Create the browser window.
@@ -44,11 +50,26 @@ app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.pukemondeck.app')
 
   // 打开只读卡牌库。缺失或损坏时不会中断启动，
-  // 渲染进程会通过 IPC 拿到状态并显示「缺失卡牌数据」提示页。
+  // 渲染进程会通过 IPC 拿到状态并显示导入页。
   openCardDatabase()
 
   ipcMain.handle('card-db:status', () => getCardDatabaseStatus())
   ipcMain.handle('card-db:reload', () => openCardDatabase())
+  ipcMain.handle('card-db:pick-and-import', (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+    return pickAndImportCardDatabase(window)
+  })
+  ipcMain.handle('card-db:import-from-path', (_event, filePath: unknown) => {
+    if (typeof filePath !== 'string') {
+      return {
+        ok: false,
+        path: '',
+        error: '无效的文件路径',
+        source: null
+      }
+    }
+    return importCardDatabase(filePath)
+  })
 
   // Default open or close DevTools by F12 in development
   // and ignore CommandOrControl + R in production.

@@ -12,13 +12,14 @@ const { join } = require('path')
  *   macOS:           <appOutDir>/<ProductName>.app/Contents/Resources/db/deck.db
  *
  * 之后生成的安装包会包含该文件；安装后也可以直接替换它来更新卡牌数据。
- * 若源文件不存在则不报错，应用会在启动时显示「缺失卡牌数据」提示页。
+ * 若源文件不存在则不报错，安装包将不含卡牌数据；应用启动后显示导入页，
+ * 用户可以手动导入数据库。
  */
 module.exports = async function afterPack(context) {
   const source = join(context.packager.projectDir, 'data', 'deck.db')
   if (!existsSync(source)) {
     // 卡牌库不随代码走，允许缺失（例如他人 clone 后直接打包）。
-    // 应用启动时会检测不到文件，并显示「缺失卡牌数据」提示页。
+    // 应用启动时会显示导入页，用户可以手动导入卡牌数据。
     console.warn(`  • card database  MISSING: ${source}（安装包将不含卡牌数据）`)
     return
   }

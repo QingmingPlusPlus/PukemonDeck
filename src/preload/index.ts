@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import type { CardDatabaseApi } from '../shared/card-db'
 
@@ -6,7 +6,10 @@ import type { CardDatabaseApi } from '../shared/card-db'
 const api: { cardDb: CardDatabaseApi } = {
   cardDb: {
     status: () => ipcRenderer.invoke('card-db:status'),
-    reload: () => ipcRenderer.invoke('card-db:reload')
+    reload: () => ipcRenderer.invoke('card-db:reload'),
+    pickAndImport: () => ipcRenderer.invoke('card-db:pick-and-import'),
+    importFromPath: (filePath: string) => ipcRenderer.invoke('card-db:import-from-path', filePath),
+    getPathForFile: (file: File) => webUtils.getPathForFile(file)
   }
 }
 
