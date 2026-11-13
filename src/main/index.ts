@@ -9,12 +9,15 @@ import {
   openCardDatabase,
   pickAndImportCardDatabase
 } from './db'
+import { getCardDetail, getFilterOptions, sanitizeQuery, searchCards } from './card-query'
 
 function createWindow(): void {
   // Create the browser window.
   const mainWindow = new BrowserWindow({
-    width: 900,
-    height: 670,
+    width: 1200,
+    height: 800,
+    minWidth: 900,
+    minHeight: 640,
     show: false,
     autoHideMenuBar: true,
     ...(process.platform === 'linux' ? { icon } : {}),
@@ -69,6 +72,12 @@ app.whenReady().then(() => {
       }
     }
     return importCardDatabase(filePath)
+  })
+  ipcMain.handle('card-db:filter-options', () => getFilterOptions())
+  ipcMain.handle('card-db:search', (_event, query: unknown) => searchCards(sanitizeQuery(query)))
+  ipcMain.handle('card-db:detail', (_event, collectionId: unknown, cardId: unknown) => {
+    if (!Number.isInteger(collectionId) || !Number.isInteger(cardId)) return null
+    return getCardDetail(collectionId as number, cardId as number)
   })
 
   // Default open or close DevTools by F12 in development

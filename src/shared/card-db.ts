@@ -1,6 +1,7 @@
 /**
  * 主进程、preload、渲染进程共用的卡牌库类型。
  */
+import type { CardDetail, CardFilterOptions, CardListQuery, CardListResult } from './card-query'
 
 /** 当前打开的卡牌库来源。 */
 export type CardDatabaseSource = 'imported' | 'bundled'
@@ -30,4 +31,10 @@ export interface CardDatabaseApi {
   importFromPath: (filePath: string) => Promise<CardDatabaseStatus>
   /** 将拖放的 File 解析为本地绝对路径（Electron webUtils） */
   getPathForFile: (file: File) => string
+  /** 筛选项（字典与卡包列表） */
+  getFilterOptions: () => Promise<CardFilterOptions>
+  /** 按条件分页查询卡牌摘要 */
+  searchCards: (query: CardListQuery) => Promise<CardListResult>
+  /** 读取单张卡牌的完整详情 */
+  getCardDetail: (collectionId: number, cardId: number) => Promise<CardDetail | null>
 }

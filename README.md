@@ -80,6 +80,12 @@ npm run dev    # 启动开发模式（支持热更新）
 
 渲染进程中使用 `@renderer` 别名指向 `src/renderer/src`。
 
+成功打开卡牌库后，主界面上方是筛选条件，下方以网格展示查询结果。
+每张卡目前用固定尺寸的文字占位卡展示名称、卡包、收集编号、类型、稀有度、HP 等基本信息（卡图将在后续版本加入）。
+点击卡牌会打开详情弹窗，显示招式、特性、弱点/抵抗力、画师等完整信息。
+筛选和分页都在主进程通过 SQL 完成，渲染进程不会一次性加载全部卡牌。
+若卡牌库不可用，则仍显示导入页。
+
 ## 数据与存储
 
 应用使用两个互相独立的 SQLite 数据库：
@@ -130,6 +136,9 @@ const user = getUserDatabase() // 可读写，持久保存在用户目录
 const status = await window.api.cardDb.status() // { ok, path, error, source }
 const next = await window.api.cardDb.pickAndImport() // 系统文件选择框
 const dropped = await window.api.cardDb.importFromPath(path) // 拖放导入
+const options = await window.api.cardDb.getFilterOptions()
+const page = await window.api.cardDb.searchCards({ filters, offset: 0, limit: 48 })
+const detail = await window.api.cardDb.getCardDetail(collectionId, cardId)
 ```
 
 `docs/db/deck.sql` 仅作为表结构参考，不会被包含进安装包。

@@ -1,0 +1,444 @@
+import { getCardDatabase } from './db'
+import type {
+  CardAbilityInfo,
+  CardCommodityInfo,
+  CardDetail,
+  CardFeatureInfo,
+  CardFilterOptions,
+  CardFilters,
+  CardListQuery,
+  CardListResult,
+  CardSkillInfo,
+  CardSummary,
+  CollectionOption,
+  DictOption
+} from '../shared/card-query'
+
+export const DEFAULT_PAGE_SIZE = 48
+export const MAX_PAGE_SIZE = 100
+
+interface DictRow {
+  dict_code: string
+  dict_value: string
+}
+
+interface CollectionRow {
+  id: number
+  name: string
+  series: string | null
+  series_text: string | null
+  sales_date: string
+}
+
+interface CardSummaryRow {
+  collection_id: number
+  id: number
+  name: string
+  collection_name: string
+  series_text: string | null
+  collection_number: string
+  card_type: string
+  card_type_text: string
+  rarity_text: string
+  regulation_mark_text: string | null
+  hp: number | null
+  attribute_text: string | null
+  evolve_text: string | null
+  trainer_type_text: string | null
+  energy_type_text: string | null
+}
+
+interface CardDetailRow extends CardSummaryRow {
+  yoren_code: string
+  pokedex_code: string | null
+  pokedex_text: string | null
+  pokemon_category: string | null
+  height: number | null
+  weight: number | null
+  rule_text: string | null
+  pokemon_type: string | null
+  special_card: string | null
+  weakness_type: string | null
+  weakness_formula: string | null
+  resistance_type: string | null
+  resistance_formula: string | null
+  retreat_cost: number | null
+}
+
+const SUMMARY_COLUMNS = `
+  c.collection_id,
+  c.id,
+  c.name,
+  col.name AS collection_name,
+  col.series_text,
+  c.collection_number,
+  c.card_type,
+  c.card_type_text,
+  c.rarity_text,
+  c.regulation_mark_text,
+  c.hp,
+  attr.dict_value AS attribute_text,
+  c.evolve_text,
+  c.trainer_type_text,
+  c.energy_type_text
+`
+
+const FROM_JOIN = `
+  FROM ptcg_card c
+  INNER JOIN ptcg_collection col ON col.id = c.collection_id
+  LEFT JOIN ptcg_dict attr
+    ON attr.type_code = 'attribute' AND attr.dict_code = c.attribute
+`
+
+export function getFilterOptions(): CardFilterOptions {
+  const db = getCardDatabase()
+
+  const loadDict = (typeCode: string): DictOption[] => {
+    const rows = db
+      .prepare(
+        `SELECT dict_code, dict_value
+         FROM ptcg_dict
+         WHERE type_code = ?
+         ORDER BY dict_sort, dict_code`
+      )
+      .all(typeCode) as DictRow[]
+    return rows.map((row) => ({ code: row.dict_code, label: row.dict_value }))
+  }
+
+  const collections = db
+    .prepare(
+      `SELECT id, name, series, series_text, sales_date
+       FROM ptcg_collection
+       ORDER BY sales_date DESC, id DESC`
+    )
+    .all() as CollectionRow[]
+
+  return {
+    series: loadDict('series'),
+    cardTypes: loadDict('card_type'),
+    attributes: loadDict('attribute'),
+    pokemonTypes: loadDict('pokemon_type'),
+    rarities: loadDict('rarity'),
+    regulationMarks: loadDict('regulation_mark'),
+    collections: collections.map((row): CollectionOption => ({
+      id: row.id,
+      name: row.name,
+      series: row.series,
+      seriesText: row.series_text,
+      salesDate: row.sales_date
+    }))
+  }
+}
+
+export function searchCards(query: CardListQuery): CardListResult {
+  const db = getCardDatabase()
+  const { filters, offset, limit } = sanitizeQuery(query)
+  const { clause, params } = buildFilterClause(filters)
+
+  const totalRow = db.prepare(`SELECT COUNT(*) AS total ${FROM_JOIN} ${clause}`).get(...params) as {
+    total: number
+  }
+
+  const items = db
+    .prepare(
+      `SELECT ${SUMMARY_COLUMNS}
+       ${FROM_JOIN}
+       ${clause}
+       ORDER BY col.sales_date DESC, c.collection_id DESC, c.collection_number ASC, c.id ASC
+       LIMIT ? OFFSET ?`
+    )
+    .all(...params, limit, offset) as CardSummaryRow[]
+
+  return {
+    total: totalRow.total,
+    offset,
+    limit,
+    items: items.map(toSummary)
+  }
+}
+
+export function getCardDetail(collectionId: number, cardId: number): CardDetail | null {
+  if (!Number.isInteger(collectionId) || !Number.isInteger(cardId)) return null
+
+  const db = getCardDatabase()
+  const row = db
+    .prepare(
+      `SELECT ${SUMMARY_COLUMNS},
+              c.yoren_code,
+              c.pokedex_code,
+              c.pokedex_text,
+              c.pokemon_category,
+              c.height,
+              c.weight,
+              c.rule_text,
+              c.pokemon_type,
+              c.special_card,
+              c.weakness_type,
+              c.weakness_formula,
+              c.resistance_type,
+              c.resistance_formula,
+              c.retreat_cost
+       ${FROM_JOIN}
+       WHERE c.collection_id = ? AND c.id = ?`
+    )
+    .get(collectionId, cardId) as CardDetailRow | undefined
+
+  if (!row) return null
+
+  const costMap = loadDictMap(db, 'ability_cost')
+  const attrMap = loadDictMap(db, 'attribute')
+  const pokemonTypeMap = loadDictMap(db, 'pokemon_type')
+  const specialMap = loadDictMap(db, 'special_card')
+
+  const features = (
+    db
+      .prepare(
+        `SELECT feature_name, feature_desc
+         FROM ptcg_card_feature
+         WHERE collection_id = ? AND card_id = ?
+         ORDER BY feature_name`
+      )
+      .all(collectionId, cardId) as { feature_name: string; feature_desc: string }[]
+  ).map((item): CardFeatureInfo => ({
+    name: item.feature_name,
+    description: item.feature_desc
+  }))
+
+  const abilities = (
+    db
+      .prepare(
+        `SELECT ability_name, ability_text, ability_cost, ability_damage
+         FROM ptcg_card_ability
+         WHERE collection_id = ? AND card_id = ?
+         ORDER BY ability_name`
+      )
+      .all(collectionId, cardId) as {
+      ability_name: string
+      ability_text: string
+      ability_cost: string | null
+      ability_damage: string
+    }[]
+  ).map((item): CardAbilityInfo => ({
+    name: item.ability_name,
+    text: blankToNull(item.ability_text),
+    cost: resolveCodes(costMap, item.ability_cost, ','),
+    damage: blankToNull(item.ability_damage)
+  }))
+
+  const skills = (
+    db
+      .prepare(
+        `SELECT name, description, cost, damage, related, type
+         FROM ptcg_card_skill
+         WHERE collection_id = ? AND card_id = ?
+         ORDER BY name`
+      )
+      .all(collectionId, cardId) as {
+      name: string
+      description: string
+      cost: string | null
+      damage: string | null
+      related: string
+      type: string
+    }[]
+  ).map((item): CardSkillInfo => ({
+    name: item.name,
+    description: item.description,
+    cost: resolveCodes(costMap, item.cost, ','),
+    damage: blankToNull(item.damage),
+    related: item.related,
+    type: item.type
+  }))
+
+  const illustrators = (
+    db
+      .prepare(
+        `SELECT illustrator_name
+         FROM ptcg_card_illustrator
+         WHERE collection_id = ? AND card_id = ?
+         ORDER BY illustrator_name`
+      )
+      .all(collectionId, cardId) as { illustrator_name: string }[]
+  ).map((item) => item.illustrator_name)
+
+  const commodities = (
+    db
+      .prepare(
+        `SELECT commodity_name, commodity_code
+         FROM ptcg_card_commodity
+         WHERE collection_id = ? AND card_id = ?
+         ORDER BY commodity_name`
+      )
+      .all(collectionId, cardId) as { commodity_name: string; commodity_code: string }[]
+  ).map((item): CardCommodityInfo => ({
+    name: item.commodity_name,
+    code: item.commodity_code
+  }))
+
+  return {
+    ...toSummary(row),
+    yorenCode: row.yoren_code,
+    pokedexCode: blankToNull(row.pokedex_code),
+    pokedexText: blankToNull(row.pokedex_text),
+    pokemonCategory: blankToNull(row.pokemon_category),
+    height: row.height,
+    weight: row.weight,
+    ruleText: blankToNull(row.rule_text),
+    pokemonTypeLabels: resolveCodes(pokemonTypeMap, row.pokemon_type, '|'),
+    specialCardLabels: resolveCodes(specialMap, row.special_card, ','),
+    weaknessTypeText: resolveOne(attrMap, row.weakness_type),
+    weaknessFormula: blankToNull(row.weakness_formula),
+    resistanceTypeText: resolveOne(attrMap, row.resistance_type),
+    resistanceFormula: blankToNull(row.resistance_formula),
+    retreatCost: row.retreat_cost,
+    illustrators,
+    features,
+    abilities,
+    skills,
+    commodities
+  }
+}
+
+export function sanitizeQuery(input: unknown): CardListQuery {
+  const raw = isRecord(input) ? input : {}
+  const filters = isRecord(raw.filters) ? raw.filters : {}
+  return {
+    offset: clampInt(raw.offset, 0, 1_000_000, 0),
+    limit: clampInt(raw.limit, 1, MAX_PAGE_SIZE, DEFAULT_PAGE_SIZE),
+    filters: {
+      keyword: optString(filters.keyword, 80),
+      series: optString(filters.series, 16),
+      collectionId: optInt(filters.collectionId),
+      cardType: optString(filters.cardType, 16),
+      attribute: optString(filters.attribute, 16),
+      pokemonType: optString(filters.pokemonType, 16),
+      rarity: optString(filters.rarity, 16),
+      regulationMark: optString(filters.regulationMark, 16)
+    }
+  }
+}
+
+function buildFilterClause(filters: CardFilters): { clause: string; params: unknown[] } {
+  const where: string[] = []
+  const params: unknown[] = []
+
+  if (filters.keyword) {
+    const pattern = `%${escapeLike(filters.keyword)}%`
+    where.push(
+      `(c.name LIKE ? ESCAPE '\\' OR c.collection_number LIKE ? ESCAPE '\\' OR col.name LIKE ? ESCAPE '\\')`
+    )
+    params.push(pattern, pattern, pattern)
+  }
+  if (filters.series) {
+    where.push('col.series = ?')
+    params.push(filters.series)
+  }
+  if (filters.collectionId != null) {
+    where.push('c.collection_id = ?')
+    params.push(filters.collectionId)
+  }
+  if (filters.cardType) {
+    where.push('c.card_type = ?')
+    params.push(filters.cardType)
+  }
+  if (filters.attribute) {
+    where.push('c.attribute = ?')
+    params.push(filters.attribute)
+  }
+  if (filters.pokemonType) {
+    // pokemon_type 使用 | 连接多个编码，例如 1|2
+    where.push(`instr('|' || IFNULL(c.pokemon_type, '') || '|', '|' || ? || '|') > 0`)
+    params.push(filters.pokemonType)
+  }
+  if (filters.rarity) {
+    where.push('c.rarity = ?')
+    params.push(filters.rarity)
+  }
+  if (filters.regulationMark) {
+    where.push('c.regulation_mark = ?')
+    params.push(filters.regulationMark)
+  }
+
+  return {
+    clause: where.length > 0 ? `WHERE ${where.join(' AND ')}` : '',
+    params
+  }
+}
+
+function toSummary(row: CardSummaryRow): CardSummary {
+  return {
+    collectionId: row.collection_id,
+    id: row.id,
+    name: row.name,
+    collectionName: row.collection_name,
+    seriesText: row.series_text,
+    collectionNumber: row.collection_number,
+    cardType: row.card_type,
+    cardTypeText: row.card_type_text,
+    rarityText: row.rarity_text,
+    regulationMarkText: row.regulation_mark_text,
+    hp: row.hp,
+    attributeText: row.attribute_text,
+    evolveText: row.evolve_text,
+    trainerTypeText: row.trainer_type_text,
+    energyTypeText: row.energy_type_text
+  }
+}
+
+function loadDictMap(
+  db: ReturnType<typeof getCardDatabase>,
+  typeCode: string
+): Map<string, string> {
+  const rows = db
+    .prepare(`SELECT dict_code, dict_value FROM ptcg_dict WHERE type_code = ?`)
+    .all(typeCode) as DictRow[]
+  return new Map(rows.map((row) => [row.dict_code, row.dict_value]))
+}
+
+function resolveCodes(map: Map<string, string>, raw: string | null, separator: string): string[] {
+  if (!raw) return []
+  return raw
+    .split(separator)
+    .map((code) => code.trim())
+    .filter((code) => code.length > 0)
+    .map((code) => map.get(code) ?? code)
+}
+
+function resolveOne(map: Map<string, string>, code: string | null): string | null {
+  if (!code) return null
+  return map.get(code) ?? code
+}
+
+function blankToNull(value: string | null | undefined): string | null {
+  if (value == null) return null
+  const trimmed = value.trim()
+  if (trimmed === '' || trimmed.toLowerCase() === 'none') return null
+  return trimmed
+}
+
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, '\\$&')
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function optString(value: unknown, maxLength: number): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  if (trimmed === '') return undefined
+  return trimmed.slice(0, maxLength)
+}
+
+function optInt(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isInteger(value) && value >= 0) return value
+  if (typeof value === 'string' && /^\d+$/.test(value)) return Number(value)
+  return undefined
+}
+
+function clampInt(value: unknown, min: number, max: number, fallback: number): number {
+  const parsed = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(parsed)) return fallback
+  return Math.min(max, Math.max(min, Math.trunc(parsed)))
+}

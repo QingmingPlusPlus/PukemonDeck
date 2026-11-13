@@ -9,7 +9,11 @@ const api: { cardDb: CardDatabaseApi } = {
     reload: () => ipcRenderer.invoke('card-db:reload'),
     pickAndImport: () => ipcRenderer.invoke('card-db:pick-and-import'),
     importFromPath: (filePath: string) => ipcRenderer.invoke('card-db:import-from-path', filePath),
-    getPathForFile: (file: File) => webUtils.getPathForFile(file)
+    getPathForFile: (file: File) => webUtils.getPathForFile(file),
+    getFilterOptions: () => ipcRenderer.invoke('card-db:filter-options'),
+    searchCards: (query) => ipcRenderer.invoke('card-db:search', query),
+    getCardDetail: (collectionId, cardId) =>
+      ipcRenderer.invoke('card-db:detail', collectionId, cardId)
   }
 }
 
