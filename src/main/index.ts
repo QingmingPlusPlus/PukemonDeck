@@ -2,7 +2,7 @@ import { app, shell, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
-import { closeDatabase, getDatabase } from './db'
+import { closeDatabases, getCardDatabase } from './db'
 
 function createWindow(): void {
   // Create the browser window.
@@ -43,8 +43,8 @@ app.whenReady().then(() => {
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.pukemondeck.app')
 
-  // Open the SQLite database (creates the file on first launch)
-  getDatabase()
+  // Open the read-only card database shipped with the app (fail fast if missing)
+  getCardDatabase()
 
   // Default open or close DevTools by F12 in development
   // and ignore CommandOrControl + R in production.
@@ -65,9 +65,9 @@ app.whenReady().then(() => {
   })
 })
 
-// Close the database connection before the app exits.
+// Close database connections before the app exits.
 app.on('will-quit', () => {
-  closeDatabase()
+  closeDatabases()
 })
 
 // Quit when all windows are closed, except on macOS. There, it's common

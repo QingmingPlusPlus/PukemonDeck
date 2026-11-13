@@ -9,9 +9,18 @@ files:
   - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  # 卡牌数据库通过 extraResources 单独拷贝，避免被打进 asar。
+  - '!resources/db/**'
+  # 仅开发期参考文档，不随应用发布。
+  - '!docs/**'
 asarUnpack:
   - 'resources/**'
   - '**/*.node'
+# 只读卡牌数据库：原生模块无法读取 asar 内的文件，必须放在 asar 之外。
+# 打包后位置：<resourcesPath>/db/deck.db
+extraResources:
+  - from: resources/db
+    to: db
 win:
   executableName: pukemondeck
 nsis:
