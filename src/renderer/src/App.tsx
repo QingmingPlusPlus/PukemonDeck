@@ -67,7 +67,7 @@ function App(): React.JSX.Element {
         setStatus((current) => ({
           ok: false,
           path: current?.path ?? '',
-          error: '无法获取文件路径，请改用点击上传区域选择文件',
+          error: '无法读取拖入的文件，请手动选择',
           source: current?.source ?? null
         }))
         return
@@ -106,7 +106,7 @@ function App(): React.JSX.Element {
   if (!status || !imageStatus) {
     return (
       <div className="app-centered">
-        <p className="tip">正在加载卡牌数据…</p>
+        <span className="spinner spinner--lg" role="status" aria-label="正在加载卡牌数据" />
       </div>
     )
   }

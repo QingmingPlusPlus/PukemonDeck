@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import type { CardDetail } from '../../../shared/card-query'
 import CardImage from './CardImage'
+import Icon from './Icon'
 
 interface CardDetailModalProps {
   detail: CardDetail | null
@@ -35,11 +36,27 @@ function CardDetailModal({
         aria-modal="true"
         aria-labelledby="card-modal-title"
       >
-        <button className="card-modal__close" type="button" onClick={onClose} aria-label="关闭">
-          ×
+        <button
+          className="card-modal__close"
+          type="button"
+          onClick={onClose}
+          aria-label="关闭"
+          title="关闭"
+        >
+          <Icon name="close" size={18} />
         </button>
-        {loading && !detail && <p className="card-modal__status">正在加载卡牌详情…</p>}
-        {error && !detail && <p className="card-modal__error">{error}</p>}
+        {loading && !detail && (
+          <div className="card-modal__status">
+            <span className="spinner" />
+            <span className="sr-only">正在加载卡牌详情</span>
+          </div>
+        )}
+        {error && !detail && (
+          <p className="card-modal__error">
+            <Icon name="alert" size={18} />
+            <span>{error}</span>
+          </p>
+        )}
         {detail && <CardDetailBody detail={detail} />}
       </div>
     </div>
@@ -66,7 +83,12 @@ function CardDetailBody({ detail }: { detail: CardDetail }): React.JSX.Element {
             alt={detail.name}
             className="card-modal__image"
             eager
-            fallback={<div className="card-modal__image-placeholder">暂无卡图</div>}
+            fallback={
+              <div className="card-modal__image-placeholder">
+                <Icon name="image" size={28} />
+                <span className="sr-only">暂无卡图</span>
+              </div>
+            }
           />
         </div>
         <div className="card-modal__details">
@@ -79,10 +101,16 @@ function CardDetailBody({ detail }: { detail: CardDetail }): React.JSX.Element {
               {detail.name}
             </h2>
             <p className="card-modal__meta">
-              <span>{detail.collectionNumber}</span>
-              <span>稀有度 {detail.rarityText}</span>
-              {detail.regulationMarkText && <span>规则标记 {detail.regulationMarkText}</span>}
-              {detail.hp != null && <span>HP {detail.hp}</span>}
+              <span className="chip">{detail.collectionNumber}</span>
+              <span className="chip" title="稀有度">
+                {detail.rarityText}
+              </span>
+              {detail.regulationMarkText && (
+                <span className="chip" title="规则标记">
+                  {detail.regulationMarkText}
+                </span>
+              )}
+              {detail.hp != null && <span className="chip chip--accent">HP {detail.hp}</span>}
             </p>
             {typeLine.length > 0 && <p className="card-modal__types">{typeLine.join(' / ')}</p>}
           </header>
@@ -114,7 +142,7 @@ function CardDetailBody({ detail }: { detail: CardDetail }): React.JSX.Element {
                   <div className="card-modal__move-head">
                     <h4>{ability.name}</h4>
                     {ability.cost.length > 0 && (
-                      <span className="card-modal__cost">{ability.cost.join(' ')}</span>
+                      <span className="chip chip--muted">{ability.cost.join(' ')}</span>
                     )}
                     {ability.damage && <span className="card-modal__damage">{ability.damage}</span>}
                   </div>
@@ -131,9 +159,9 @@ function CardDetailBody({ detail }: { detail: CardDetail }): React.JSX.Element {
                 <article key={skill.name} className="card-modal__move">
                   <div className="card-modal__move-head">
                     <h4>{skill.name}</h4>
-                    {skill.related && <span className="card-modal__tag">{skill.related}</span>}
+                    {skill.related && <span className="chip chip--muted">{skill.related}</span>}
                     {skill.cost.length > 0 && (
-                      <span className="card-modal__cost">{skill.cost.join(' ')}</span>
+                      <span className="chip chip--muted">{skill.cost.join(' ')}</span>
                     )}
                     {skill.damage && <span className="card-modal__damage">{skill.damage}</span>}
                   </div>

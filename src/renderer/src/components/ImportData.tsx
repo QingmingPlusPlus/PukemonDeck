@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { CardDatabaseStatus } from '../../../shared/card-db'
+import Icon from './Icon'
 
 interface ImportDataProps {
   status: CardDatabaseStatus
@@ -55,10 +56,10 @@ function ImportData({ status, importing, onPick, onDropFile }: ImportDataProps):
 
   return (
     <div className="import-data">
-      <h1 className="import-data__title">缺失卡牌数据</h1>
-      <p className="import-data__desc">
-        未找到可用的卡牌数据库，暂时无法加载卡牌内容。你可以手动导入卡牌数据，导入后会保存在本机，下次启动无需重新导入。
-      </p>
+      <span className="import-data__icon">
+        <Icon name="database" size={26} />
+      </span>
+      <h1 className="import-data__title">导入卡牌数据</h1>
       <div
         className={zoneClass}
         role="button"
@@ -72,15 +73,20 @@ function ImportData({ status, importing, onPick, onDropFile }: ImportDataProps):
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
+        <span className="import-data__drop-icon">
+          {importing ? <span className="spinner" /> : <Icon name="upload" size={22} />}
+        </span>
         <p className="import-data__drop-title">
-          {importing ? '正在导入…' : dragging ? '松开鼠标以导入文件' : '将卡牌数据库拖到此处'}
+          {importing ? '正在导入…' : dragging ? '松开以导入' : '拖放或点击选择'}
         </p>
-        <p className="import-data__drop-hint">
-          {importing ? '请稍候，正在校验并保存数据库' : '也可以点击此处打开系统文件选择框'}
-        </p>
-        <p className="import-data__drop-types">支持 .db / .sqlite</p>
+        <p className="import-data__drop-types">.db / .sqlite</p>
       </div>
-      {status.error && <p className="import-data__error">错误信息：{status.error}</p>}
+      {status.error && (
+        <p className="import-data__error" role="alert">
+          <Icon name="alert" size={14} />
+          <span>{status.error}</span>
+        </p>
+      )}
     </div>
   )
 }

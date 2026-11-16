@@ -1,5 +1,6 @@
 import type { CardDatabaseStatus } from '../../../shared/card-db'
 import type { CardImageProgress, CardImageStatus } from '../../../shared/card-image'
+import Icon from './Icon'
 
 interface SettingsProps {
   status: CardDatabaseStatus
@@ -36,123 +37,125 @@ function Settings({
 
   return (
     <section className="settings">
-      <header className="settings__header">
-        <h1>设置</h1>
-        <p>管理牌库数据库和本地卡图资源。</p>
-      </header>
-
       <div className="settings__card">
         <div className="settings__card-heading">
-          <div>
+          <div className="settings__card-title">
+            <Icon name="database" size={18} className="settings__card-icon" />
             <h2>牌库数据库</h2>
-            <p>导入成功后会覆盖此前导入的 deck.db，并立即使用新数据。</p>
+            <span className={`status-pill${status.ok ? ' status-pill--ok' : ''}`}>
+              {status.ok ? '已加载' : '不可用'}
+            </span>
           </div>
-          <span className={`settings__status${status.ok ? ' settings__status--ok' : ''}`}>
-            {status.ok ? '已加载' : '不可用'}
-          </span>
+          <button
+            className="button button--primary"
+            type="button"
+            disabled={importing}
+            title="选择新的数据库文件并覆盖当前数据"
+            onClick={onImport}
+          >
+            {importing && !imageImporting ? '导入中…' : '更换'}
+          </button>
         </div>
 
         <dl className="settings__details">
-          <dt>当前文件</dt>
+          <dt>文件</dt>
           <dd>
-            <code>{status.path || '尚未导入'}</code>
+            <code>{status.path || '—'}</code>
           </dd>
-          <dt>数据来源</dt>
+          <dt>来源</dt>
           <dd>{sourceText}</dd>
         </dl>
 
-        <div className="settings__actions">
-          <button
-            className="settings__import"
-            type="button"
-            disabled={importing}
-            onClick={onImport}
-          >
-            {importing && !imageImporting ? '正在导入…' : '选择并导入 DB'}
-          </button>
-          <p>支持 .db / .sqlite 文件，导入前会校验数据库格式和核心数据表。</p>
-        </div>
-
-        {status.error && <p className="settings__error">错误信息：{status.error}</p>}
+        {status.error && (
+          <p className="settings__error" role="alert">
+            <Icon name="alert" size={14} />
+            <span>{status.error}</span>
+          </p>
+        )}
       </div>
 
-      <div className="settings__card settings__card--images">
+      <div className="settings__card">
         <div className="settings__card-heading">
-          <div>
+          <div className="settings__card-title">
+            <Icon name="image" size={18} className="settings__card-icon" />
             <h2>卡牌图片</h2>
-            <p>选择包含 img 的文件夹，应用会复制数据库引用的卡图和卡包封面。</p>
+            <span className={`status-pill${imageStatus.ok ? ' status-pill--ok' : ''}`}>
+              {imageStatus.ok ? '已导入' : '未导入'}
+            </span>
           </div>
-          <span className={`settings__status${imageStatus.ok ? ' settings__status--ok' : ''}`}>
-            {imageStatus.ok ? '已导入' : '未导入'}
-          </span>
+          <div className="settings__actions">
+            {imageImporting && (
+              <button
+                className="button"
+                type="button"
+                disabled={imageProgress?.phase === 'finalizing'}
+                onClick={onCancelImages}
+              >
+                取消
+              </button>
+            )}
+            <button
+              className="button button--primary"
+              type="button"
+              disabled={importing}
+              title="选择包含 img 的文件夹；再次导入会替换当前图片"
+              onClick={onImportImages}
+            >
+              {imageImporting ? '导入中…' : imageStatus.ok ? '替换' : '导入'}
+            </button>
+          </div>
         </div>
 
-        <dl className="settings__details">
-          <dt>存储位置</dt>
-          <dd>
-            <code>{imageStatus.path || '尚未导入'}</code>
-          </dd>
-          <dt>导入结果</dt>
-          <dd>
-            {imageStatus.importedAt
-              ? `已复制 ${imageStatus.imported} / ${imageStatus.total} 张，缺失 ${imageStatus.missing} 张`
-              : '尚未导入图片'}
-          </dd>
-          {imageStatus.importedAt && (
-            <>
-              <dt>导入时间</dt>
-              <dd>{formatDate(imageStatus.importedAt)}</dd>
-            </>
-          )}
-        </dl>
+        {imageStatus.path && (
+          <dl className="settings__details">
+            <dt>存储</dt>
+            <dd>
+              <code>{imageStatus.path}</code>
+            </dd>
+            {imageStatus.importedAt && (
+              <>
+                <dt>图片</dt>
+                <dd className="settings__counts">
+                  <span>
+                    {imageStatus.imported} / {imageStatus.total}
+                  </span>
+                  {imageStatus.missing > 0 && (
+                    <span className="chip chip--warn">缺 {imageStatus.missing}</span>
+                  )}
+                </dd>
+                <dt>导入</dt>
+                <dd>{formatDate(imageStatus.importedAt)}</dd>
+              </>
+            )}
+          </dl>
+        )}
 
         {imageImporting && imageProgress && (
           <div className="settings__progress" aria-live="polite">
             <div className="settings__progress-heading">
               <span>
                 {imageProgress.phase === 'finalizing'
-                  ? '正在启用新图片版本…'
-                  : `正在复制 ${imageProgress.processed} / ${imageProgress.total}`}
+                  ? '正在启用新版本'
+                  : `${imageProgress.processed} / ${imageProgress.total}`}
               </span>
-              <span>{imageProgress.phase === 'finalizing' ? '请稍候' : `${progressPercent}%`}</span>
+              <span>{imageProgress.phase === 'finalizing' ? '' : `${progressPercent}%`}</span>
             </div>
             <progress
               aria-label="图片导入进度"
               max={imageProgress.total || 1}
               value={imageProgress.processed}
             />
-            <p>
-              已复制 {imageProgress.imported} 张，缺失 {imageProgress.missing}{' '}
-              张。导入期间旧图片继续可用。
-            </p>
+            {imageProgress.missing > 0 && (
+              <p>
+                已复制 {imageProgress.imported} 张，缺失 {imageProgress.missing} 张
+              </p>
+            )}
           </div>
         )}
 
-        <div className="settings__actions">
-          <button
-            className="settings__import"
-            type="button"
-            disabled={importing}
-            onClick={onImportImages}
-          >
-            {imageImporting ? '正在导入…' : imageStatus.ok ? '重新导入并替换' : '选择并导入图片'}
-          </button>
-          {imageImporting && (
-            <button
-              className="settings__secondary"
-              type="button"
-              disabled={imageProgress?.phase === 'finalizing'}
-              onClick={onCancelImages}
-            >
-              取消导入
-            </button>
-          )}
-          <p>再次导入会完整替换当前版本；失败或取消不会影响原有图片。</p>
-        </div>
-
         {imageStatus.missingSamples.length > 0 && (
           <details className="settings__missing">
-            <summary>查看缺失路径示例</summary>
+            <summary>缺失路径</summary>
             <ul>
               {imageStatus.missingSamples.map((path) => (
                 <li key={path}>
@@ -162,7 +165,12 @@ function Settings({
             </ul>
           </details>
         )}
-        {imageStatus.error && <p className="settings__error">{imageStatus.error}</p>}
+        {imageStatus.error && (
+          <p className="settings__error" role="alert">
+            <Icon name="alert" size={14} />
+            <span>{imageStatus.error}</span>
+          </p>
+        )}
       </div>
     </section>
   )
