@@ -10,6 +10,30 @@ import {
   pickAndImportCardDatabase
 } from './db'
 import { getCardDetail, getFilterOptions, sanitizeQuery, searchCards } from './card-query'
+import {
+  cancelCardImageImport,
+  cleanupCardImageLibrary,
+  getCardImageStatus,
+  isCardImageImporting,
+  pickAndImportCardImages,
+  registerCardImageProtocol,
+  registerCardImageScheme
+} from './image-library'
+
+registerCardImageScheme()
+
+const hasSingleInstanceLock = app.requestSingleInstanceLock()
+if (!hasSingleInstanceLock) app.quit()
+else {
+  app.on('second-instance', () => {
+    const window = BrowserWindow.getAllWindows()[0]
+    if (!window) return
+    if (window.isMinimized()) window.restore()
+    window.focus()
+  })
+}
+
+let cardDbImporting = false
 
 function createWindow(): void {
   // Create the browser window.
@@ -49,20 +73,39 @@ function createWindow(): void {
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
+  if (!hasSingleInstanceLock) return
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.pukemondeck.app')
 
   // 打开只读卡牌库。缺失或损坏时不会中断启动，
   // 渲染进程会通过 IPC 拿到状态并显示导入页。
   openCardDatabase()
+  cleanupCardImageLibrary()
+  registerCardImageProtocol()
 
   ipcMain.handle('card-db:status', () => getCardDatabaseStatus())
-  ipcMain.handle('card-db:reload', () => openCardDatabase())
-  ipcMain.handle('card-db:pick-and-import', (event) => {
-    const window = BrowserWindow.fromWebContents(event.sender)
-    return pickAndImportCardDatabase(window)
+  ipcMain.handle('card-db:reload', () => {
+    if (cardDbImporting || isCardImageImporting()) {
+      return { ...getCardDatabaseStatus(), error: '数据导入期间不能重新加载卡牌数据库' }
+    }
+    return openCardDatabase()
+  })
+  ipcMain.handle('card-db:pick-and-import', async (event) => {
+    if (cardDbImporting || isCardImageImporting()) {
+      return { ...getCardDatabaseStatus(), error: '已有数据导入任务正在进行' }
+    }
+    cardDbImporting = true
+    try {
+      const window = BrowserWindow.fromWebContents(event.sender)
+      return await pickAndImportCardDatabase(window)
+    } finally {
+      cardDbImporting = false
+    }
   })
   ipcMain.handle('card-db:import-from-path', (_event, filePath: unknown) => {
+    if (cardDbImporting || isCardImageImporting()) {
+      return { ...getCardDatabaseStatus(), error: '已有数据导入任务正在进行' }
+    }
     if (typeof filePath !== 'string') {
       return {
         ok: false,
@@ -73,6 +116,15 @@ app.whenReady().then(() => {
     }
     return importCardDatabase(filePath)
   })
+  ipcMain.handle('card-image:status', () => getCardImageStatus())
+  ipcMain.handle('card-image:pick-and-import', (event) => {
+    if (cardDbImporting) {
+      return { ...getCardImageStatus(), error: '请先完成卡牌数据库导入' }
+    }
+    const window = BrowserWindow.fromWebContents(event.sender)
+    return pickAndImportCardImages(window)
+  })
+  ipcMain.handle('card-image:cancel', () => cancelCardImageImport())
   ipcMain.handle('card-db:filter-options', () => getFilterOptions())
   ipcMain.handle('card-db:search', (_event, query: unknown) => searchCards(sanitizeQuery(query)))
   ipcMain.handle('card-db:detail', (_event, collectionId: unknown, cardId: unknown) => {

@@ -3,17 +3,45 @@ import ImportData from './components/ImportData'
 import CardBrowse from './components/CardBrowse'
 import Settings from './components/Settings'
 import type { CardDatabaseStatus } from '../../shared/card-db'
+import type { CardImageProgress, CardImageStatus } from '../../shared/card-image'
 
 type AppTab = 'cards' | 'settings'
 
 function App(): React.JSX.Element {
   const [status, setStatus] = useState<CardDatabaseStatus | null>(null)
+  const [imageStatus, setImageStatus] = useState<CardImageStatus | null>(null)
+  const [imageProgress, setImageProgress] = useState<CardImageProgress | null>(null)
   const [importing, setImporting] = useState(false)
+  const [imageImporting, setImageImporting] = useState(false)
   const [activeTab, setActiveTab] = useState<AppTab>('cards')
+  const imageBusy = imageImporting || Boolean(imageStatus?.importing)
+  const busy = importing || imageBusy
 
   useEffect(() => {
     window.api.cardDb.status().then(setStatus)
+    window.api.cardImage
+      .status()
+      .then(setImageStatus)
+      .catch((error: unknown) => setImageStatus(unavailableImageStatus(error)))
+    return window.api.cardImage.onProgress(setImageProgress)
   }, [])
+
+  useEffect(() => {
+    if (!imageStatus?.importing || imageImporting) return
+    const timer = window.setInterval(() => {
+      window.api.cardImage
+        .status()
+        .then(setImageStatus)
+        .catch((error: unknown) => {
+          setImageStatus((current) => ({
+            ...(current ?? unavailableImageStatus(error)),
+            importing: false,
+            error: error instanceof Error ? error.message : '读取图片状态失败'
+          }))
+        })
+    }, 500)
+    return () => window.clearInterval(timer)
+  }, [imageImporting, imageStatus?.importing])
 
   const applyImportResult = (result: CardDatabaseStatus): void => {
     if (result.cancelled) return
@@ -21,7 +49,7 @@ function App(): React.JSX.Element {
   }
 
   const handlePick = async (): Promise<void> => {
-    if (importing) return
+    if (busy) return
     setImporting(true)
     try {
       applyImportResult(await window.api.cardDb.pickAndImport())
@@ -31,7 +59,7 @@ function App(): React.JSX.Element {
   }
 
   const handleDropFile = async (file: File): Promise<void> => {
-    if (importing) return
+    if (busy) return
     setImporting(true)
     try {
       const filePath = window.api.cardDb.getPathForFile(file)
@@ -50,7 +78,32 @@ function App(): React.JSX.Element {
     }
   }
 
-  if (!status) {
+  const handleImagePick = async (): Promise<void> => {
+    if (busy) return
+    setImageImporting(true)
+    setImageProgress(null)
+    try {
+      setImageStatus(await window.api.cardImage.pickAndImport())
+    } catch (error) {
+      setImageStatus((current) =>
+        current
+          ? {
+              ...current,
+              error: error instanceof Error ? error.message : '导入图片失败'
+            }
+          : current
+      )
+    } finally {
+      setImageImporting(false)
+      setImageProgress(null)
+    }
+  }
+
+  const handleImageCancel = (): void => {
+    void window.api.cardImage.cancel()
+  }
+
+  if (!status || !imageStatus) {
     return (
       <div className="app-centered">
         <p className="tip">正在加载卡牌数据…</p>
@@ -63,7 +116,7 @@ function App(): React.JSX.Element {
       <div className="app-centered">
         <ImportData
           status={status}
-          importing={importing}
+          importing={busy}
           onPick={handlePick}
           onDropFile={handleDropFile}
         />
@@ -82,7 +135,7 @@ function App(): React.JSX.Element {
           role="tab"
           aria-selected={activeTab === 'cards'}
           aria-controls="cards-panel"
-          disabled={importing}
+          disabled={busy}
           onClick={() => setActiveTab('cards')}
         >
           牌库
@@ -94,7 +147,7 @@ function App(): React.JSX.Element {
           role="tab"
           aria-selected={activeTab === 'settings'}
           aria-controls="settings-panel"
-          disabled={importing}
+          disabled={busy}
           onClick={() => setActiveTab('settings')}
         >
           设置
@@ -109,11 +162,35 @@ function App(): React.JSX.Element {
         {activeTab === 'cards' ? (
           <CardBrowse />
         ) : (
-          <Settings status={status} importing={importing} onImport={handlePick} />
+          <Settings
+            status={status}
+            importing={busy}
+            onImport={handlePick}
+            imageStatus={imageStatus}
+            imageProgress={imageProgress}
+            imageImporting={imageBusy}
+            onImportImages={handleImagePick}
+            onCancelImages={handleImageCancel}
+          />
         )}
       </div>
     </div>
   )
+}
+
+function unavailableImageStatus(error: unknown): CardImageStatus {
+  return {
+    ok: false,
+    path: '',
+    generation: null,
+    total: 0,
+    imported: 0,
+    missing: 0,
+    missingSamples: [],
+    importedAt: null,
+    importing: false,
+    error: error instanceof Error ? error.message : '图片功能不可用'
+  }
 }
 
 export default App

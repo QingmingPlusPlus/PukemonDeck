@@ -6,6 +6,7 @@ import type {
   CardSummary
 } from '../../../shared/card-query'
 import CardDetailModal from './CardDetailModal'
+import CardImage from './CardImage'
 
 const PAGE_SIZE = 48
 const KEYWORD_DELAY_MS = 300
@@ -325,6 +326,14 @@ function CardBrowse(): React.JSX.Element {
                 className="card-tile"
                 onClick={() => void openDetail(card)}
               >
+                <div className="card-tile__visual">
+                  <CardImage
+                    src={card.imageUrl}
+                    alt={card.name}
+                    className="card-tile__image"
+                    fallback={<div className="card-tile__placeholder">暂无卡图</div>}
+                  />
+                </div>
                 <div className="card-tile__top">
                   <span className="card-tile__rarity">{card.rarityText}</span>
                   <span className="card-tile__kind">

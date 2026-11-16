@@ -1,4 +1,5 @@
 import { getCardDatabase } from './db'
+import { getCardImageUrl } from './image-library'
 import type {
   CardAbilityInfo,
   CardCommodityInfo,
@@ -46,6 +47,7 @@ interface CardSummaryRow {
   evolve_text: string | null
   trainer_type_text: string | null
   energy_type_text: string | null
+  image: string
 }
 
 interface CardDetailRow extends CardSummaryRow {
@@ -80,7 +82,8 @@ const SUMMARY_COLUMNS = `
   attr.dict_value AS attribute_text,
   c.evolve_text,
   c.trainer_type_text,
-  c.energy_type_text
+  c.energy_type_text,
+  c.image
 `
 
 const FROM_JOIN = `
@@ -498,7 +501,8 @@ function toSummary(row: CardSummaryRow): CardSummary {
     attributeText: row.attribute_text,
     evolveText: row.evolve_text,
     trainerTypeText: row.trainer_type_text,
-    energyTypeText: row.energy_type_text
+    energyTypeText: row.energy_type_text,
+    imageUrl: getCardImageUrl(row.image)
   }
 }
 

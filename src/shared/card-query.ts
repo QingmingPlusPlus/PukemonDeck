@@ -55,6 +55,8 @@ export interface CardSummary {
   evolveText: string | null
   trainerTypeText: string | null
   energyTypeText: string | null
+  /** 受控卡图 URL；未导入图片时为 null。 */
+  imageUrl: string | null
 }
 
 export interface CardListResult {
