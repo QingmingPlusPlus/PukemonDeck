@@ -874,9 +874,9 @@ code {
 
 .card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(172px, 1fr));
-  gap: 14px;
-  padding: 16px 16px 4px;
+  grid-template-columns: repeat(auto-fill, minmax(252px, 1fr));
+  gap: 18px;
+  padding: 18px 18px 6px;
 }
 
 .card-tile {
@@ -959,7 +959,7 @@ code {
   max-height: 2.7em;
   margin-bottom: 4px;
   overflow: hidden;
-  font-size: 14.5px;
+  font-size: 16px;
   font-weight: 700;
   line-height: 1.35;
   -webkit-box-orient: vertical;
@@ -1484,9 +1484,9 @@ code {
   }
 
   .card-grid {
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    gap: 10px;
-    padding: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 14px;
+    padding: 14px;
   }
 
   .card-modal-overlay {

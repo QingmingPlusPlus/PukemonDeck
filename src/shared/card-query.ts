@@ -35,7 +35,15 @@ export interface CardFilters {
   regulationMark?: string
   /** 多个规则标记（赛制码）编码，匹配任一 */
   regulationMarks?: string[]
+  /**
+   * 合并相同卡牌：lowest 每组只保留最低稀有度，
+   * highest 只保留最高稀有度；未设置则不合并。
+   */
+  merge?: CardMergeMode
 }
+
+/** 相同卡牌的稀有度合并方式 */
+export type CardMergeMode = 'lowest' | 'highest'
 
 export interface CardListQuery {
   filters: CardFilters
