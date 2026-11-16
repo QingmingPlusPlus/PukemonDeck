@@ -1,7 +1,14 @@
 /**
  * 主进程、preload、渲染进程共用的卡牌库类型。
  */
-import type { CardDetail, CardFilterOptions, CardListQuery, CardListResult } from './card-query'
+import type {
+  CardDetail,
+  CardFilterOptions,
+  CardListQuery,
+  CardListResult,
+  CollectionListQuery,
+  CollectionOption
+} from './card-query'
 
 /** 当前打开的卡牌库来源。 */
 export type CardDatabaseSource = 'imported' | 'bundled'
@@ -33,6 +40,8 @@ export interface CardDatabaseApi {
   getPathForFile: (file: File) => string
   /** 筛选项（字典与卡包列表） */
   getFilterOptions: () => Promise<CardFilterOptions>
+  /** 按发行顺序列出集合；可选按赛制码筛选 */
+  listCollections: (query?: CollectionListQuery) => Promise<CollectionOption[]>
   /** 按条件分页查询卡牌摘要 */
   searchCards: (query: CardListQuery) => Promise<CardListResult>
   /** 读取单张卡牌的完整详情 */

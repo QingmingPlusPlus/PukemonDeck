@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { CollectionOption, CardSummary } from '../../../shared/card-query'
+import type { CollectionOption, CardSummary, DictOption } from '../../../shared/card-query'
 import { CardResultPane } from './CardGrid'
 import Icon from './Icon'
 
@@ -9,8 +9,6 @@ interface CollectionGroup {
   label: string
   items: CollectionOption[]
 }
-
-const TAIL_GROUP_LABELS = ['其他', '未分类']
 
 function groupCollections(collections: CollectionOption[]): CollectionGroup[] {
   const groups = new Map<string, CollectionOption[]>()
@@ -23,16 +21,14 @@ function groupCollections(collections: CollectionOption[]): CollectionGroup[] {
     }
     groups.get(label)?.push(item)
   }
-  const labels = [
-    ...order.filter((label) => !TAIL_GROUP_LABELS.includes(label)),
-    ...TAIL_GROUP_LABELS.filter((label) => groups.has(label))
-  ]
-  return labels.map((label) => ({ label, items: groups.get(label) ?? [] }))
+  return order.map((label) => ({ label, items: groups.get(label) ?? [] }))
 }
 
 function CollectionBrowse(): React.JSX.Element {
   const [collections, setCollections] = useState<CollectionOption[]>([])
+  const [markOptions, setMarkOptions] = useState<DictOption[]>([])
   const [selectedIds, setSelectedIds] = useState<number[]>([])
+  const [selectedMarks, setSelectedMarks] = useState<string[]>([])
   const [keyword, setKeyword] = useState('')
   const [items, setItems] = useState<CardSummary[]>([])
   const [total, setTotal] = useState(0)
@@ -40,15 +36,6 @@ function CollectionBrowse(): React.JSX.Element {
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const requestIdRef = useRef(0)
-
-  useEffect(() => {
-    window.api.cardDb
-      .getFilterOptions()
-      .then((options) => setCollections(options.collections))
-      .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : '无法加载集合')
-      })
-  }, [])
 
   const resetResults = useCallback((): void => {
     requestIdRef.current += 1
@@ -59,7 +46,49 @@ function CollectionBrowse(): React.JSX.Element {
     setError(null)
   }, [])
 
-  const loadPage = useCallback((collectionIds: number[], offset: number): void => {
+  const applyCollections = useCallback(
+    (next: CollectionOption[]): void => {
+      setCollections(next)
+      const visible = new Set(next.map((item) => item.id))
+      setSelectedIds((current) => {
+        const filtered = current.filter((id) => visible.has(id))
+        if (filtered.length === current.length) return current
+        if (filtered.length === 0) resetResults()
+        return filtered
+      })
+    },
+    [resetResults]
+  )
+
+  useEffect(() => {
+    window.api.cardDb
+      .getFilterOptions()
+      .then((options) => setMarkOptions(options.regulationMarks))
+      .catch((err: unknown) => {
+        setError(err instanceof Error ? err.message : '无法加载赛制码')
+      })
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    window.api.cardDb
+      .listCollections({
+        regulationMarks: selectedMarks.length > 0 ? selectedMarks : undefined
+      })
+      .then((next) => {
+        if (!cancelled) applyCollections(next)
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return
+        setError(err instanceof Error ? err.message : '无法加载集合')
+        applyCollections([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [selectedMarks, applyCollections])
+
+  const loadPage = useCallback((collectionIds: number[], marks: string[], offset: number): void => {
     if (collectionIds.length === 0) return
 
     const requestId = ++requestIdRef.current
@@ -69,7 +98,10 @@ function CollectionBrowse(): React.JSX.Element {
       setError(null)
       try {
         const result = await window.api.cardDb.searchCards({
-          filters: { collectionIds },
+          filters: {
+            collectionIds,
+            regulationMarks: marks.length > 0 ? marks : undefined
+          },
           offset,
           limit: PAGE_SIZE
         })
@@ -94,12 +126,14 @@ function CollectionBrowse(): React.JSX.Element {
 
   useEffect(() => {
     if (selectedIds.length === 0) return
-    void loadPage(selectedIds, 0)
-  }, [selectedIds, loadPage])
+    void loadPage(selectedIds, selectedMarks, 0)
+  }, [selectedIds, selectedMarks, loadPage])
 
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds])
+  const selectedMarkSet = useMemo(() => new Set(selectedMarks), [selectedMarks])
   const hasMore = items.length < total
   const hasSelection = selectedIds.length > 0
+  const hasMarks = selectedMarks.length > 0
 
   const visibleGroups = useMemo(() => {
     const query = keyword.trim().toLowerCase()
@@ -118,6 +152,12 @@ function CollectionBrowse(): React.JSX.Element {
       if (next.length === 0) resetResults()
       return next
     })
+  }
+
+  const toggleMark = (code: string): void => {
+    setSelectedMarks((current) =>
+      current.includes(code) ? current.filter((item) => item !== code) : current.concat(code)
+    )
   }
 
   const clearSelection = (): void => {
@@ -155,17 +195,38 @@ function CollectionBrowse(): React.JSX.Element {
               </button>
             )}
           </div>
-          {hasSelection && (
+          {(hasSelection || hasMarks) && (
             <button
               className="icon-button"
               type="button"
               title="清除选择"
               aria-label="清除选择"
-              onClick={clearSelection}
+              onClick={() => {
+                setSelectedMarks([])
+                clearSelection()
+              }}
             >
               <Icon name="reset" size={16} />
             </button>
           )}
+        </div>
+
+        <div className="collections__marks" role="group" aria-label="赛制码">
+          {markOptions.map((item) => {
+            const selected = selectedMarkSet.has(item.code)
+            return (
+              <button
+                key={item.code}
+                type="button"
+                className={`mark-toggle${selected ? ' mark-toggle--on' : ''}`}
+                aria-pressed={selected}
+                title={item.label}
+                onClick={() => toggleMark(item.code)}
+              >
+                {item.label}
+              </button>
+            )
+          })}
         </div>
 
         <div className="collections__groups" role="group" aria-label="全部集合">
@@ -223,8 +284,8 @@ function CollectionBrowse(): React.JSX.Element {
               </button>
             ) : undefined
           }
-          onRetry={() => void loadPage(selectedIds, 0)}
-          onLoadMore={() => void loadPage(selectedIds, items.length)}
+          onRetry={() => void loadPage(selectedIds, selectedMarks, 0)}
+          onLoadMore={() => void loadPage(selectedIds, selectedMarks, items.length)}
         />
       </div>
     </div>

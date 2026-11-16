@@ -33,12 +33,19 @@ export interface CardFilters {
   rarity?: string
   /** 规则标记编码 */
   regulationMark?: string
+  /** 多个规则标记（赛制码）编码，匹配任一 */
+  regulationMarks?: string[]
 }
 
 export interface CardListQuery {
   filters: CardFilters
   offset: number
   limit: number
+}
+
+/** 集合列表查询：可按赛制码筛选包含相应卡牌的集合 */
+export interface CollectionListQuery {
+  regulationMarks?: string[]
 }
 
 export interface CardSummary {

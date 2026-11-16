@@ -9,7 +9,13 @@ import {
   openCardDatabase,
   pickAndImportCardDatabase
 } from './db'
-import { getCardDetail, getFilterOptions, sanitizeQuery, searchCards } from './card-query'
+import {
+  getCardDetail,
+  getFilterOptions,
+  listCollections,
+  sanitizeQuery,
+  searchCards
+} from './card-query'
 import {
   cancelCardImageImport,
   cleanupCardImageLibrary,
@@ -126,6 +132,7 @@ app.whenReady().then(() => {
   })
   ipcMain.handle('card-image:cancel', () => cancelCardImageImport())
   ipcMain.handle('card-db:filter-options', () => getFilterOptions())
+  ipcMain.handle('card-db:collections', (_event, query: unknown) => listCollections(query))
   ipcMain.handle('card-db:search', (_event, query: unknown) => searchCards(sanitizeQuery(query)))
   ipcMain.handle('card-db:detail', (_event, collectionId: unknown, cardId: unknown) => {
     if (!Number.isInteger(collectionId) || !Number.isInteger(cardId)) return null
