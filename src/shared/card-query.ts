@@ -10,6 +10,8 @@ export interface CardFilters {
   series?: string
   /** 卡包（商品）ID */
   collectionId?: number
+  /** 多个卡包（商品）ID，匹配任一集合内的卡牌 */
+  collectionIds?: number[]
   /**
    * 卡牌类别。由 card_type / trainer_type / energy_type 组合而来：
    * card:1 宝可梦、card:2 训练家、card:3 能量，

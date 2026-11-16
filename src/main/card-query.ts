@@ -314,6 +314,7 @@ export function sanitizeQuery(input: unknown): CardListQuery {
       keyword: optString(filters.keyword, 80),
       series: optString(filters.series, 16),
       collectionId: optInt(filters.collectionId),
+      collectionIds: optIntList(filters.collectionIds, 500),
       category: optCategory(filters.category),
       attribute: optString(filters.attribute, 16),
       weaknessType: optWeaknessType(filters.weaknessType),
@@ -447,6 +448,15 @@ function buildFilterClause(filters: CardFilters): { clause: string; params: unkn
     where.push('c.collection_id = ?')
     params.push(filters.collectionId)
   }
+  if (filters.collectionIds) {
+    if (filters.collectionIds.length === 0) {
+      where.push('0')
+    } else {
+      const placeholders = filters.collectionIds.map(() => '?').join(', ')
+      where.push(`c.collection_id IN (${placeholders})`)
+      params.push(...filters.collectionIds)
+    }
+  }
   if (filters.category) {
     applyCategoryFilter(filters.category, where, params)
   }
@@ -556,6 +566,20 @@ function optInt(value: unknown): number | undefined {
   if (typeof value === 'number' && Number.isInteger(value) && value >= 0) return value
   if (typeof value === 'string' && /^\d+$/.test(value)) return Number(value)
   return undefined
+}
+
+function optIntList(value: unknown, maxItems: number): number[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const ids: number[] = []
+  const seen = new Set<number>()
+  for (const item of value) {
+    const parsed = optInt(item)
+    if (parsed == null || seen.has(parsed)) continue
+    seen.add(parsed)
+    ids.push(parsed)
+    if (ids.length >= maxItems) break
+  }
+  return ids
 }
 
 function clampInt(value: unknown, min: number, max: number, fallback: number): number {
