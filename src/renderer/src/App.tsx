@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import ImportData from './components/ImportData'
 import CardBrowse from './components/CardBrowse'
+import CollectionBrowse from './components/CollectionBrowse'
 import Settings from './components/Settings'
 import type { CardDatabaseStatus } from '../../shared/card-db'
 import type { CardImageProgress, CardImageStatus } from '../../shared/card-image'
 
-type AppTab = 'cards' | 'settings'
+type AppTab = 'cards' | 'collections' | 'settings'
 
 function App(): React.JSX.Element {
   const [status, setStatus] = useState<CardDatabaseStatus | null>(null)
@@ -141,6 +142,18 @@ function App(): React.JSX.Element {
           牌库
         </button>
         <button
+          id="collections-tab"
+          className={`app-tabs__tab${activeTab === 'collections' ? ' app-tabs__tab--active' : ''}`}
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'collections'}
+          aria-controls="collections-panel"
+          disabled={busy}
+          onClick={() => setActiveTab('collections')}
+        >
+          集合
+        </button>
+        <button
           id="settings-tab"
           className={`app-tabs__tab${activeTab === 'settings' ? ' app-tabs__tab--active' : ''}`}
           type="button"
@@ -161,6 +174,8 @@ function App(): React.JSX.Element {
       >
         {activeTab === 'cards' ? (
           <CardBrowse />
+        ) : activeTab === 'collections' ? (
+          <CollectionBrowse />
         ) : (
           <Settings
             status={status}

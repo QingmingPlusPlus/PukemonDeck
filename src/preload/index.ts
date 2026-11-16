@@ -12,6 +12,7 @@ const api: { cardDb: CardDatabaseApi; cardImage: CardImageApi } = {
     importFromPath: (filePath: string) => ipcRenderer.invoke('card-db:import-from-path', filePath),
     getPathForFile: (file: File) => webUtils.getPathForFile(file),
     getFilterOptions: () => ipcRenderer.invoke('card-db:filter-options'),
+    listCollections: (query) => ipcRenderer.invoke('card-db:collections', query),
     searchCards: (query) => ipcRenderer.invoke('card-db:search', query),
     getCardDetail: (collectionId, cardId) =>
       ipcRenderer.invoke('card-db:detail', collectionId, cardId)

@@ -11,6 +11,7 @@ import type {
   CardListResult,
   CardSkillInfo,
   CardSummary,
+  CollectionListQuery,
   CollectionOption,
   DictOption
 } from '../shared/card-query'
@@ -125,13 +126,46 @@ export function getFilterOptions(): CardFilterOptions {
     pokemonTypes: loadDict('pokemon_type'),
     rarities: loadDict('rarity'),
     regulationMarks: loadDict('regulation_mark'),
-    collections: collections.map((row): CollectionOption => ({
-      id: row.id,
-      name: row.name,
-      series: row.series,
-      seriesText: row.series_text,
-      salesDate: row.sales_date
-    }))
+    collections: collections.map(toCollectionOption)
+  }
+}
+
+function toCollectionOption(row: CollectionRow): CollectionOption {
+  return {
+    id: row.id,
+    name: row.name,
+    series: row.series,
+    seriesText: row.series_text,
+    salesDate: row.sales_date
+  }
+}
+
+export function listCollections(input?: unknown): CollectionOption[] {
+  const db = getCardDatabase()
+  const marks = sanitizeCollectionListQuery(input).regulationMarks
+  const condition = marks && marks.length > 0 ? regulationMarkCondition(marks) : null
+
+  const rows = db
+    .prepare(
+      condition
+        ? `SELECT DISTINCT col.id, col.name, col.series, col.series_text, col.sales_date
+           FROM ptcg_collection col
+           INNER JOIN ptcg_card c ON c.collection_id = col.id
+           WHERE ${condition.sql}
+           ORDER BY col.sales_date DESC, col.id DESC`
+        : `SELECT id, name, series, series_text, sales_date
+           FROM ptcg_collection
+           ORDER BY sales_date DESC, id DESC`
+    )
+    .all(...(condition ? condition.params : [])) as CollectionRow[]
+
+  return rows.map(toCollectionOption)
+}
+
+export function sanitizeCollectionListQuery(input: unknown): CollectionListQuery {
+  const raw = isRecord(input) ? input : {}
+  return {
+    regulationMarks: optRegulationMarks(raw.regulationMarks)
   }
 }
 
@@ -314,13 +348,15 @@ export function sanitizeQuery(input: unknown): CardListQuery {
       keyword: optString(filters.keyword, 80),
       series: optString(filters.series, 16),
       collectionId: optInt(filters.collectionId),
+      collectionIds: optIntList(filters.collectionIds, 500),
       category: optCategory(filters.category),
       attribute: optString(filters.attribute, 16),
       weaknessType: optWeaknessType(filters.weaknessType),
       evolution: optEvolution(filters.evolution),
       pokemonType: optString(filters.pokemonType, 16),
       rarity: optString(filters.rarity, 16),
-      regulationMark: optString(filters.regulationMark, 16)
+      regulationMark: optRegulationMark(filters.regulationMark),
+      regulationMarks: optRegulationMarks(filters.regulationMarks)
     }
   }
 }
@@ -447,6 +483,15 @@ function buildFilterClause(filters: CardFilters): { clause: string; params: unkn
     where.push('c.collection_id = ?')
     params.push(filters.collectionId)
   }
+  if (filters.collectionIds) {
+    if (filters.collectionIds.length === 0) {
+      where.push('0')
+    } else {
+      const placeholders = filters.collectionIds.map(() => '?').join(', ')
+      where.push(`c.collection_id IN (${placeholders})`)
+      params.push(...filters.collectionIds)
+    }
+  }
   if (filters.category) {
     applyCategoryFilter(filters.category, where, params)
   }
@@ -475,8 +520,10 @@ function buildFilterClause(filters: CardFilters): { clause: string; params: unkn
     params.push(filters.rarity)
   }
   if (filters.regulationMark) {
-    where.push('c.regulation_mark = ?')
-    params.push(filters.regulationMark)
+    applyRegulationMarks([filters.regulationMark], where, params)
+  }
+  if (filters.regulationMarks) {
+    applyRegulationMarks(filters.regulationMarks, where, params)
   }
 
   return {
@@ -552,10 +599,84 @@ function optString(value: unknown, maxLength: number): string | undefined {
   return trimmed.slice(0, maxLength)
 }
 
+function optRegulationMark(value: unknown): string | undefined {
+  const raw = optString(value, 16)
+  if (!raw) return undefined
+  return /^\d{1,3}$/.test(raw) ? raw : undefined
+}
+
+function optRegulationMarks(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const codes: string[] = []
+  const seen = new Set<string>()
+  for (const item of value) {
+    const parsed = optRegulationMark(item)
+    if (!parsed || seen.has(parsed)) continue
+    seen.add(parsed)
+    codes.push(parsed)
+    if (codes.length >= 20) break
+  }
+  return codes
+}
+
+function regulationMarkCondition(codes: string[]): { sql: string; params: unknown[] } | null {
+  if (codes.length === 0) return null
+  const db = getCardDatabase()
+  const codePlaceholders = codes.map(() => '?').join(', ')
+  const labels = (
+    db
+      .prepare(
+        `SELECT dict_value
+         FROM ptcg_dict
+         WHERE type_code = 'regulation_mark' AND dict_code IN (${codePlaceholders})`
+      )
+      .all(...codes) as { dict_value: string }[]
+  )
+    .map((row) => row.dict_value)
+    .filter((label) => label.trim().length > 0)
+
+  const params: unknown[] = [...codes]
+  let sql = `c.regulation_mark IN (${codePlaceholders})`
+  if (labels.length > 0) {
+    const labelPlaceholders = labels.map(() => '?').join(', ')
+    sql = `(${sql} OR c.regulation_mark_text IN (${labelPlaceholders}))`
+    params.push(...labels)
+  }
+  return { sql, params }
+}
+
+function applyRegulationMarks(codes: string[], where: string[], params: unknown[]): void {
+  if (codes.length === 0) {
+    where.push('0')
+    return
+  }
+  const condition = regulationMarkCondition(codes)
+  if (!condition) {
+    where.push('0')
+    return
+  }
+  where.push(condition.sql)
+  params.push(...condition.params)
+}
+
 function optInt(value: unknown): number | undefined {
   if (typeof value === 'number' && Number.isInteger(value) && value >= 0) return value
   if (typeof value === 'string' && /^\d+$/.test(value)) return Number(value)
   return undefined
+}
+
+function optIntList(value: unknown, maxItems: number): number[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const ids: number[] = []
+  const seen = new Set<number>()
+  for (const item of value) {
+    const parsed = optInt(item)
+    if (parsed == null || seen.has(parsed)) continue
+    seen.add(parsed)
+    ids.push(parsed)
+    if (ids.length >= maxItems) break
+  }
+  return ids
 }
 
 function clampInt(value: unknown, min: number, max: number, fallback: number): number {

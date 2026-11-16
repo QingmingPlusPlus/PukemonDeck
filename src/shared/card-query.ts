@@ -10,6 +10,8 @@ export interface CardFilters {
   series?: string
   /** 卡包（商品）ID */
   collectionId?: number
+  /** 多个卡包（商品）ID，匹配任一集合内的卡牌 */
+  collectionIds?: number[]
   /**
    * 卡牌类别。由 card_type / trainer_type / energy_type 组合而来：
    * card:1 宝可梦、card:2 训练家、card:3 能量，
@@ -31,12 +33,19 @@ export interface CardFilters {
   rarity?: string
   /** 规则标记编码 */
   regulationMark?: string
+  /** 多个规则标记（赛制码）编码，匹配任一 */
+  regulationMarks?: string[]
 }
 
 export interface CardListQuery {
   filters: CardFilters
   offset: number
   limit: number
+}
+
+/** 集合列表查询：可按赛制码筛选包含相应卡牌的集合 */
+export interface CollectionListQuery {
+  regulationMarks?: string[]
 }
 
 export interface CardSummary {
