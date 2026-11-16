@@ -4,6 +4,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import {
   closeDatabases,
+  confirmAndClearCardDatabase,
   getCardDatabaseStatus,
   importCardDatabase,
   openCardDatabase,
@@ -16,6 +17,7 @@ import {
   sanitizeQuery,
   searchCards
 } from './card-query'
+import { addCardToDefaultDeck, createDeck, getDeckCards, listDecks, setDefaultDeck } from './decks'
 import {
   cancelCardImageImport,
   cleanupCardImageLibrary,
@@ -39,7 +41,7 @@ else {
   })
 }
 
-let cardDbImporting = false
+let cardDbBusy = false
 
 function createWindow(): void {
   // Create the browser window.
@@ -91,26 +93,26 @@ app.whenReady().then(() => {
 
   ipcMain.handle('card-db:status', () => getCardDatabaseStatus())
   ipcMain.handle('card-db:reload', () => {
-    if (cardDbImporting || isCardImageImporting()) {
-      return { ...getCardDatabaseStatus(), error: '数据导入期间不能重新加载卡牌数据库' }
+    if (cardDbBusy || isCardImageImporting()) {
+      return { ...getCardDatabaseStatus(), error: '数据操作期间不能重新加载卡牌数据库' }
     }
     return openCardDatabase()
   })
   ipcMain.handle('card-db:pick-and-import', async (event) => {
-    if (cardDbImporting || isCardImageImporting()) {
-      return { ...getCardDatabaseStatus(), error: '已有数据导入任务正在进行' }
+    if (cardDbBusy || isCardImageImporting()) {
+      return { ...getCardDatabaseStatus(), error: '已有数据操作正在进行' }
     }
-    cardDbImporting = true
+    cardDbBusy = true
     try {
       const window = BrowserWindow.fromWebContents(event.sender)
       return await pickAndImportCardDatabase(window)
     } finally {
-      cardDbImporting = false
+      cardDbBusy = false
     }
   })
   ipcMain.handle('card-db:import-from-path', (_event, filePath: unknown) => {
-    if (cardDbImporting || isCardImageImporting()) {
-      return { ...getCardDatabaseStatus(), error: '已有数据导入任务正在进行' }
+    if (cardDbBusy || isCardImageImporting()) {
+      return { ...getCardDatabaseStatus(), error: '已有数据操作正在进行' }
     }
     if (typeof filePath !== 'string') {
       return {
@@ -122,22 +124,41 @@ app.whenReady().then(() => {
     }
     return importCardDatabase(filePath)
   })
+  ipcMain.handle('card-db:clear-imported', async (event) => {
+    if (cardDbBusy || isCardImageImporting()) {
+      return { ...getCardDatabaseStatus(), error: '已有数据操作正在进行' }
+    }
+    cardDbBusy = true
+    try {
+      const window = BrowserWindow.fromWebContents(event.sender)
+      return await confirmAndClearCardDatabase(window)
+    } finally {
+      cardDbBusy = false
+    }
+  })
   ipcMain.handle('card-image:status', () => getCardImageStatus())
   ipcMain.handle('card-image:pick-and-import', (event) => {
-    if (cardDbImporting) {
-      return { ...getCardImageStatus(), error: '请先完成卡牌数据库导入' }
+    if (cardDbBusy) {
+      return { ...getCardImageStatus(), error: '请先完成卡牌数据库操作' }
     }
     const window = BrowserWindow.fromWebContents(event.sender)
     return pickAndImportCardImages(window)
   })
   ipcMain.handle('card-image:cancel', () => cancelCardImageImport())
-  ipcMain.handle('card-db:filter-options', () => getFilterOptions())
+  ipcMain.handle('card-db:filter-options', (_event, scope: unknown) => getFilterOptions(scope))
   ipcMain.handle('card-db:collections', (_event, query: unknown) => listCollections(query))
   ipcMain.handle('card-db:search', (_event, query: unknown) => searchCards(sanitizeQuery(query)))
   ipcMain.handle('card-db:detail', (_event, collectionId: unknown, cardId: unknown) => {
     if (!Number.isInteger(collectionId) || !Number.isInteger(cardId)) return null
     return getCardDetail(collectionId as number, cardId as number)
   })
+  ipcMain.handle('decks:list', () => listDecks())
+  ipcMain.handle('decks:create', (_event, name: unknown) => createDeck(name))
+  ipcMain.handle('decks:set-default', (_event, deckId: unknown) => setDefaultDeck(deckId))
+  ipcMain.handle('decks:cards', (_event, deckId: unknown) => getDeckCards(deckId))
+  ipcMain.handle('decks:add-card', (_event, collectionId: unknown, cardId: unknown) =>
+    addCardToDefaultDeck(collectionId, cardId)
+  )
 
   // Default open or close DevTools by F12 in development
   // and ignore CommandOrControl + R in production.

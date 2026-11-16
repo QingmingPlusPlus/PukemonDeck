@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
+  CardBrowseScope,
   CardFilterOptions,
   CardFilters,
   CardSummary,
@@ -13,7 +14,13 @@ const KEYWORD_DELAY_MS = 300
 
 const EMPTY_FILTERS: CardFilters = {}
 
-function CardBrowse(): React.JSX.Element {
+interface CardBrowseProps {
+  scope?: CardBrowseScope
+  title: string
+  onAddCard: (card: CardSummary) => void
+}
+
+function CardBrowse({ scope, title, onAddCard }: CardBrowseProps): React.JSX.Element {
   const [options, setOptions] = useState<CardFilterOptions | null>(null)
   const [filters, setFilters] = useState<CardFilters>(EMPTY_FILTERS)
   const [keywordInput, setKeywordInput] = useState('')
@@ -27,12 +34,12 @@ function CardBrowse(): React.JSX.Element {
 
   useEffect(() => {
     window.api.cardDb
-      .getFilterOptions()
+      .getFilterOptions(scope)
       .then(setOptions)
       .catch((err: unknown) => {
         setError(err instanceof Error ? err.message : '无法加载筛选条件')
       })
-  }, [])
+  }, [scope])
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -48,36 +55,40 @@ function CardBrowse(): React.JSX.Element {
     return () => window.clearTimeout(timer)
   }, [keywordInput])
 
-  const loadPage = useCallback((nextFilters: CardFilters, offset: number): void => {
-    const requestId = ++requestIdRef.current
-    void (async () => {
-      if (offset === 0) setLoading(true)
-      else setLoadingMore(true)
-      setError(null)
-      try {
-        const result = await window.api.cardDb.searchCards({
-          filters: nextFilters,
-          offset,
-          limit: PAGE_SIZE
-        })
-        if (requestId !== requestIdRef.current) return
-        setTotal(result.total)
-        setItems((current) => (offset === 0 ? result.items : current.concat(result.items)))
-      } catch (err) {
-        if (requestId !== requestIdRef.current) return
-        setError(err instanceof Error ? err.message : '查询卡牌失败')
-        if (offset === 0) {
-          setItems([])
-          setTotal(0)
+  const loadPage = useCallback(
+    (nextFilters: CardFilters, offset: number): void => {
+      const requestId = ++requestIdRef.current
+      void (async () => {
+        if (offset === 0) setLoading(true)
+        else setLoadingMore(true)
+        setError(null)
+        try {
+          const result = await window.api.cardDb.searchCards({
+            scope,
+            filters: nextFilters,
+            offset,
+            limit: PAGE_SIZE
+          })
+          if (requestId !== requestIdRef.current) return
+          setTotal(result.total)
+          setItems((current) => (offset === 0 ? result.items : current.concat(result.items)))
+        } catch (err) {
+          if (requestId !== requestIdRef.current) return
+          setError(err instanceof Error ? err.message : '查询卡牌失败')
+          if (offset === 0) {
+            setItems([])
+            setTotal(0)
+          }
+        } finally {
+          if (requestId === requestIdRef.current) {
+            setLoading(false)
+            setLoadingMore(false)
+          }
         }
-      } finally {
-        if (requestId === requestIdRef.current) {
-          setLoading(false)
-          setLoadingMore(false)
-        }
-      }
-    })()
-  }, [])
+      })()
+    },
+    [scope]
+  )
 
   useEffect(() => {
     void loadPage(filters, 0)
@@ -91,17 +102,31 @@ function CardBrowse(): React.JSX.Element {
     return options.collections.filter((item) => item.series === filters.series)
   }, [options, filters.series])
 
-  const activeFilterCount = Object.values(filters).filter(
-    (value) => value !== undefined && value !== ''
-  ).length
+  let categories = options?.categories
+  let categoryLabel = '类别'
+  if (scope === 'trainer') {
+    categories = categories?.filter(
+      ({ code }) => code.startsWith('trainer:') && code !== 'trainer:1'
+    )
+    categoryLabel = '训练家类型'
+  }
+  if (scope === 'energy') {
+    categories = categories?.filter(({ code }) => code.startsWith('energy:'))
+    categoryLabel = '能量类型'
+  }
+
   const hiddenFilterCount = [
-    filters.attribute,
+    scope === 'pokemon' ? undefined : filters.attribute,
     filters.weaknessType,
+    filters.resistanceType,
     filters.evolution,
     filters.pokemonType,
+    filters.hp,
+    filters.retreatCost,
+    scope === 'item' ? undefined : filters.specialCard,
     filters.rarity,
     filters.regulationMark
-  ].filter(Boolean).length
+  ].filter((value) => value !== undefined).length
 
   const updateFilter = <K extends keyof CardFilters>(key: K, value: CardFilters[K]): void => {
     setFilters((current) => {
@@ -131,12 +156,12 @@ function CardBrowse(): React.JSX.Element {
     setFilters(EMPTY_FILTERS)
   }
 
-  const filterActive = activeFilterCount > 0 || keywordInput.length > 0
+  const filterActive = Object.keys(filters).length > 0 || keywordInput.length > 0
 
   return (
     <div className="browse">
       <header className="browse__toolbar">
-        <h1 className="sr-only">牌库</h1>
+        <h1 className="sr-only">{title}</h1>
         <div className="browse__bar">
           <div className="browse__search">
             <Icon name="search" size={16} className="browse__search-icon" />
@@ -185,12 +210,30 @@ function CardBrowse(): React.JSX.Element {
               </option>
             ))}
           </select>
-          <DictSelect
-            label="类别"
-            value={filters.category}
-            options={options?.categories}
-            onChange={(value) => updateFilter('category', value)}
-          />
+          {scope !== 'pokemon' && scope !== 'item' && (
+            <DictSelect
+              label={categoryLabel}
+              value={filters.category}
+              options={categories}
+              onChange={(value) => updateFilter('category', value)}
+            />
+          )}
+          {scope === 'pokemon' && (
+            <DictSelect
+              label="属性"
+              value={filters.attribute}
+              options={options?.attributes}
+              onChange={(value) => updateFilter('attribute', value)}
+            />
+          )}
+          {scope === 'item' && (
+            <DictSelect
+              label="特殊分类"
+              value={filters.specialCard}
+              options={options?.specialCards}
+              onChange={(value) => updateFilter('specialCard', value)}
+            />
+          )}
           <select
             className="browse__select browse__select--wide"
             aria-label="合并相同卡牌"
@@ -244,30 +287,70 @@ function CardBrowse(): React.JSX.Element {
 
         {showAdvanced && (
           <div id="browse-advanced" className="browse__advanced">
-            <DictSelect
-              label="属性"
-              value={filters.attribute}
-              options={options?.attributes}
-              onChange={(value) => updateFilter('attribute', value)}
-            />
-            <DictSelect
-              label="弱点"
-              value={filters.weaknessType}
-              options={options?.weaknessTypes}
-              onChange={(value) => updateFilter('weaknessType', value)}
-            />
-            <DictSelect
-              label="进化"
-              value={filters.evolution}
-              options={options?.evolutions}
-              onChange={(value) => updateFilter('evolution', value)}
-            />
-            <DictSelect
-              label="种类"
-              value={filters.pokemonType}
-              options={options?.pokemonTypes}
-              onChange={(value) => updateFilter('pokemonType', value)}
-            />
+            {(!scope || scope === 'energy') && (
+              <DictSelect
+                label="属性"
+                value={filters.attribute}
+                options={options?.attributes}
+                onChange={(value) => updateFilter('attribute', value)}
+              />
+            )}
+            {(!scope || scope === 'pokemon') && (
+              <>
+                <DictSelect
+                  label="弱点"
+                  value={filters.weaknessType}
+                  options={options?.weaknessTypes}
+                  onChange={(value) => updateFilter('weaknessType', value)}
+                />
+                <DictSelect
+                  label="进化"
+                  value={filters.evolution}
+                  options={options?.evolutions}
+                  onChange={(value) => updateFilter('evolution', value)}
+                />
+                <DictSelect
+                  label="种类"
+                  value={filters.pokemonType}
+                  options={options?.pokemonTypes}
+                  onChange={(value) => updateFilter('pokemonType', value)}
+                />
+              </>
+            )}
+            {scope === 'pokemon' && (
+              <>
+                <DictSelect
+                  label="抵抗力"
+                  value={filters.resistanceType}
+                  options={options?.resistanceTypes}
+                  onChange={(value) => updateFilter('resistanceType', value)}
+                />
+                <DictSelect
+                  label="HP"
+                  value={filters.hp?.toString()}
+                  options={options?.hpValues}
+                  onChange={(value) =>
+                    updateFilter('hp', value == null ? undefined : Number(value))
+                  }
+                />
+                <DictSelect
+                  label="撤退费用"
+                  value={filters.retreatCost?.toString()}
+                  options={options?.retreatCosts}
+                  onChange={(value) =>
+                    updateFilter('retreatCost', value == null ? undefined : Number(value))
+                  }
+                />
+              </>
+            )}
+            {scope && scope !== 'item' && (
+              <DictSelect
+                label="特殊分类"
+                value={filters.specialCard}
+                options={options?.specialCards}
+                onChange={(value) => updateFilter('specialCard', value)}
+              />
+            )}
             <DictSelect
               label="稀有度"
               value={filters.rarity}
@@ -286,6 +369,7 @@ function CardBrowse(): React.JSX.Element {
 
       <CardResultPane
         items={items}
+        onAddCard={onAddCard}
         loading={loading}
         loadingMore={loadingMore}
         error={error}
@@ -320,6 +404,7 @@ function DictSelect({ label, value, options, onChange }: DictSelectProps): React
       aria-label={label}
       title={label}
       value={value ?? ''}
+      disabled={!options?.length}
       onChange={(event) => onChange(event.target.value || undefined)}
     >
       <option value="">{label}</option>

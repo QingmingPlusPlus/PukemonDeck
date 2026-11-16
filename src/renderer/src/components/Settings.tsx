@@ -4,8 +4,11 @@ import Icon from './Icon'
 
 interface SettingsProps {
   status: CardDatabaseStatus
+  busy: boolean
   importing: boolean
+  clearing: boolean
   onImport: () => void
+  onClear: () => void
   imageStatus: CardImageStatus
   imageProgress: CardImageProgress | null
   imageImporting: boolean
@@ -15,8 +18,11 @@ interface SettingsProps {
 
 function Settings({
   status,
+  busy,
   importing,
+  clearing,
   onImport,
+  onClear,
   imageStatus,
   imageProgress,
   imageImporting,
@@ -46,15 +52,26 @@ function Settings({
               {status.ok ? '已加载' : '不可用'}
             </span>
           </div>
-          <button
-            className="button button--primary"
-            type="button"
-            disabled={importing}
-            title="选择新的数据库文件并覆盖当前数据"
-            onClick={onImport}
-          >
-            {importing && !imageImporting ? '导入中…' : '更换'}
-          </button>
+          <div className="settings__actions">
+            <button
+              className="button button--danger"
+              type="button"
+              disabled={busy || status.source !== 'imported'}
+              title="删除已导入的数据库副本"
+              onClick={onClear}
+            >
+              {clearing ? '清除中…' : '清除'}
+            </button>
+            <button
+              className="button button--primary"
+              type="button"
+              disabled={busy}
+              title="选择新的数据库文件并覆盖当前数据"
+              onClick={onImport}
+            >
+              {importing ? '导入中…' : '更换'}
+            </button>
+          </div>
         </div>
 
         <dl className="settings__details">
@@ -97,7 +114,7 @@ function Settings({
             <button
               className="button button--primary"
               type="button"
-              disabled={importing}
+              disabled={busy}
               title="选择包含 img 的文件夹；再次导入会替换当前图片"
               onClick={onImportImages}
             >

@@ -1,5 +1,5 @@
-import { useEffect } from 'react'
-import type { CardDetail } from '../../../shared/card-query'
+import { useEffect, useRef } from 'react'
+import type { CardDetail, CardSummary } from '../../../shared/card-query'
 import CardImage from './CardImage'
 import Icon from './Icon'
 
@@ -8,14 +8,26 @@ interface CardDetailModalProps {
   loading: boolean
   error: string | null
   onClose: () => void
+  onAddCard?: (card: CardSummary) => void
 }
 
 function CardDetailModal({
   detail,
   loading,
   error,
-  onClose
+  onClose,
+  onAddCard
 }: CardDetailModalProps): React.JSX.Element {
+  const closeRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    const previous = document.activeElement
+    closeRef.current?.focus()
+    return () => {
+      if (previous instanceof HTMLElement && previous.isConnected) previous.focus()
+    }
+  }, [])
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') onClose()
@@ -36,15 +48,29 @@ function CardDetailModal({
         aria-modal="true"
         aria-labelledby="card-modal-title"
       >
-        <button
-          className="card-modal__close"
-          type="button"
-          onClick={onClose}
-          aria-label="关闭"
-          title="关闭"
-        >
-          <Icon name="close" size={18} />
-        </button>
+        <div className="card-modal__actions">
+          <button
+            ref={closeRef}
+            className="card-modal__close"
+            type="button"
+            onClick={onClose}
+            aria-label="关闭"
+            title="关闭"
+          >
+            <Icon name="close" size={18} />
+          </button>
+          {detail && onAddCard && (
+            <button
+              type="button"
+              className="icon-button card-modal__add"
+              aria-label={`将${detail.name}添加到默认牌组`}
+              title="添加到默认牌组"
+              onClick={() => onAddCard(detail)}
+            >
+              <Icon name="plus" size={18} />
+            </button>
+          )}
+        </div>
         {loading && !detail && (
           <div className="card-modal__status">
             <span className="spinner" />

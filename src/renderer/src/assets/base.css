@@ -31,6 +31,20 @@
   --color-text: var(--ev-c-text-1);
 }
 
+:root[data-theme='light'] {
+  --color-background: #f5f7fb;
+  --color-background-soft: #fff;
+  --color-background-mute: #edf1f7;
+
+  --ev-c-gray-1: #8796ac;
+  --ev-c-gray-2: #aebacf;
+  --ev-c-gray-3: #dce3ef;
+
+  --ev-c-text-1: #1c2739;
+  --ev-c-text-2: #445268;
+  --ev-c-text-3: #546378;
+}
+
 *,
 *::before,
 *::after {

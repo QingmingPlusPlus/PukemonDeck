@@ -2,6 +2,7 @@
  * 主进程、preload、渲染进程共用的卡牌库类型。
  */
 import type {
+  CardBrowseScope,
   CardDetail,
   CardFilterOptions,
   CardListQuery,
@@ -22,7 +23,7 @@ export interface CardDatabaseStatus {
   error: string | null
   /** 成功打开时的来源；未打开时为 null */
   source: CardDatabaseSource | null
-  /** 用户在系统文件选择框中取消了选择 */
+  /** 用户取消了系统对话框中的操作 */
   cancelled?: boolean
 }
 
@@ -36,10 +37,12 @@ export interface CardDatabaseApi {
   pickAndImport: () => Promise<CardDatabaseStatus>
   /** 导入给定路径的数据库文件（用于拖放） */
   importFromPath: (filePath: string) => Promise<CardDatabaseStatus>
+  /** 确认后删除应用保存的导入副本，并重新检测卡牌库 */
+  clearImported: () => Promise<CardDatabaseStatus>
   /** 将拖放的 File 解析为本地绝对路径（Electron webUtils） */
   getPathForFile: (file: File) => string
   /** 筛选项（字典与卡包列表） */
-  getFilterOptions: () => Promise<CardFilterOptions>
+  getFilterOptions: (scope?: CardBrowseScope) => Promise<CardFilterOptions>
   /** 按发行顺序列出集合；可选按赛制码筛选 */
   listCollections: (query?: CollectionListQuery) => Promise<CollectionOption[]>
   /** 按条件分页查询卡牌摘要 */

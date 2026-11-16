@@ -1,7 +1,20 @@
 import type { ReactNode } from 'react'
 
 export type IconName =
-  'search' | 'upload' | 'database' | 'filter' | 'close' | 'reset' | 'image' | 'alert'
+  | 'search'
+  | 'upload'
+  | 'database'
+  | 'filter'
+  | 'close'
+  | 'reset'
+  | 'image'
+  | 'alert'
+  | 'sun'
+  | 'moon'
+  | 'plus'
+  | 'check'
+  | 'star'
+  | 'deck'
 
 const PATHS: Record<IconName, ReactNode> = {
   search: (
@@ -56,6 +69,24 @@ const PATHS: Record<IconName, ReactNode> = {
       <circle cx="12" cy="12" r="9" />
       <path d="M12 7.5v5" />
       <path d="M12 16.5h.01" />
+    </>
+  ),
+  sun: (
+    <>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4m0-14.2-1.4 1.4M6.3 17.7l-1.4 1.4" />
+    </>
+  ),
+  moon: <path d="M20.9 13.4A9 9 0 0 1 10.6 3.1a9 9 0 1 0 10.3 10.3Z" />,
+  plus: <path d="M12 5v14M5 12h14" />,
+  check: <path d="m5 12 4 4L19 6" />,
+  star: (
+    <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3l-5.6 2.9 1.1-6.2L3 9.6l6.2-.9L12 3Z" />
+  ),
+  deck: (
+    <>
+      <rect x="8" y="3" width="12" height="16" rx="2" />
+      <path d="M4 7v12a4 4 0 0 0 4 4h8" />
     </>
   )
 }

@@ -24,7 +24,11 @@ function groupCollections(collections: CollectionOption[]): CollectionGroup[] {
   return order.map((label) => ({ label, items: groups.get(label) ?? [] }))
 }
 
-function CollectionBrowse(): React.JSX.Element {
+interface CollectionBrowseProps {
+  onAddCard: (card: CardSummary) => void
+}
+
+function CollectionBrowse({ onAddCard }: CollectionBrowseProps): React.JSX.Element {
   const [collections, setCollections] = useState<CollectionOption[]>([])
   const [markOptions, setMarkOptions] = useState<DictOption[]>([])
   const [selectedIds, setSelectedIds] = useState<number[]>([])
@@ -271,6 +275,7 @@ function CollectionBrowse(): React.JSX.Element {
         </div>
         <CardResultPane
           items={items}
+          onAddCard={onAddCard}
           loading={loading}
           loadingMore={loadingMore}
           error={error}

@@ -18,10 +18,12 @@ export interface CardFilters {
    * trainer:1 物品 等，energy:1 基本能量 等。
    */
   category?: string
-  /** 宝可梦属性编码（草、火、水等） */
+  /** 属性编码（草、火、水等） */
   attribute?: string
   /** 弱点属性编码；none 表示没有弱点 */
   weaknessType?: string
+  /** 抵抗力属性编码；none 表示没有抵抗力 */
+  resistanceType?: string
   /**
    * 进化筛选：basic 未进化（基础）、evolved 已进化，
    * text:1阶进化 等按 evolve_text 精确匹配。
@@ -29,6 +31,10 @@ export interface CardFilters {
   evolution?: string
   /** 宝可梦种类编码（V、ex、VMAX 等，源字段可多值） */
   pokemonType?: string
+  hp?: number
+  retreatCost?: number
+  /** 特殊卡牌分类编码（源字段可多值） */
+  specialCard?: string
   /** 稀有度编码 */
   rarity?: string
   /** 规则标记编码 */
@@ -45,7 +51,11 @@ export interface CardFilters {
 /** 相同卡牌的稀有度合并方式 */
 export type CardMergeMode = 'lowest' | 'highest'
 
+export type CardBrowseScope = 'pokemon' | 'trainer' | 'item' | 'energy'
+
 export interface CardListQuery {
+  /** 分类页签固定的卡牌范围 */
+  scope?: CardBrowseScope
   filters: CardFilters
   offset: number
   limit: number
@@ -102,8 +112,12 @@ export interface CardFilterOptions {
   categories: DictOption[]
   attributes: DictOption[]
   weaknessTypes: DictOption[]
+  resistanceTypes: DictOption[]
   evolutions: DictOption[]
   pokemonTypes: DictOption[]
+  hpValues: DictOption[]
+  retreatCosts: DictOption[]
+  specialCards: DictOption[]
   rarities: DictOption[]
   regulationMarks: DictOption[]
   collections: CollectionOption[]

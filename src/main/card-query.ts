@@ -2,6 +2,7 @@ import { getCardDatabase } from './db'
 import { getCardImageUrl } from './image-library'
 import type {
   CardAbilityInfo,
+  CardBrowseScope,
   CardCommodityInfo,
   CardDetail,
   CardFeatureInfo,
@@ -20,6 +21,13 @@ import { rarityClassRankSql, raritySuffixRankSql, sortRarityOptions } from '../s
 
 export const DEFAULT_PAGE_SIZE = 48
 export const MAX_PAGE_SIZE = 100
+
+const CARD_SCOPE_CONDITIONS: Record<CardBrowseScope, string> = {
+  pokemon: `c.card_type = '1'`,
+  trainer: `c.card_type = '2' AND c.trainer_type IS NOT '1'`,
+  item: `c.card_type = '2' AND c.trainer_type = '1'`,
+  energy: `c.card_type = '3'`
+}
 
 interface DictRow {
   dict_code: string
@@ -181,8 +189,9 @@ const IDENTITY_PARTITION = `
 const RARITY_SORT_SQL = rarityClassRankSql('c.rarity')
 const RARITY_SUFFIX_SQL = raritySuffixRankSql('c.rarity_text')
 
-export function getFilterOptions(): CardFilterOptions {
+export function getFilterOptions(input?: unknown): CardFilterOptions {
   const db = getCardDatabase()
+  const scope = optCardScope(input)
 
   const loadDict = (typeCode: string): DictOption[] => {
     const rows = db
@@ -196,6 +205,44 @@ export function getFilterOptions(): CardFilterOptions {
     return rows.map((row) => ({ code: row.dict_code, label: row.dict_value }))
   }
 
+  const loadPokemonNumbers = (column: 'hp' | 'retreat_cost'): DictOption[] => {
+    const values = db
+      .prepare(
+        `SELECT DISTINCT c.${column} FROM ptcg_card c
+         WHERE ${CARD_SCOPE_CONDITIONS.pokemon} AND c.${column} IS NOT NULL
+         ORDER BY c.${column}`
+      )
+      .pluck()
+      .all() as number[]
+    return values.map((value) => ({ code: String(value), label: String(value) }))
+  }
+
+  let attributes = loadDict('attribute')
+  if (scope === 'energy') {
+    const codes = new Set(
+      db
+        .prepare(
+          `SELECT DISTINCT c.attribute FROM ptcg_card c WHERE ${CARD_SCOPE_CONDITIONS.energy}`
+        )
+        .pluck()
+        .all()
+    )
+    attributes = attributes.filter(({ code }) => codes.has(code))
+  }
+
+  let specialCards: DictOption[] = []
+  if (scope) {
+    const values = db
+      .prepare(
+        `SELECT DISTINCT c.special_card FROM ptcg_card c
+         WHERE ${CARD_SCOPE_CONDITIONS[scope]} AND c.special_card IS NOT NULL`
+      )
+      .pluck()
+      .all() as string[]
+    const codes = new Set(values.flatMap((value) => value.split(',')))
+    specialCards = loadDict('special_card').filter(({ code }) => codes.has(code))
+  }
+
   const collections = db
     .prepare(
       `SELECT id, name, series, series_text, sales_date
@@ -207,10 +254,14 @@ export function getFilterOptions(): CardFilterOptions {
   return {
     series: loadDict('series'),
     categories: buildCategoryOptions(loadDict),
-    attributes: loadDict('attribute'),
+    attributes,
     weaknessTypes: [{ code: 'none', label: '无弱点' }, ...loadDict('weakness_type')],
+    resistanceTypes: [{ code: 'none', label: '无抵抗力' }, ...loadDict('resistance_type')],
     evolutions: buildEvolutionOptions(db, loadDict),
     pokemonTypes: loadDict('pokemon_type'),
+    hpValues: scope === 'pokemon' ? loadPokemonNumbers('hp') : [],
+    retreatCosts: scope === 'pokemon' ? loadPokemonNumbers('retreat_cost') : [],
+    specialCards,
     rarities: sortRarityOptions(loadDict('rarity')),
     regulationMarks: loadDict('regulation_mark'),
     collections: collections.map(toCollectionOption)
@@ -258,8 +309,8 @@ export function sanitizeCollectionListQuery(input: unknown): CollectionListQuery
 
 export function searchCards(query: CardListQuery): CardListResult {
   const db = getCardDatabase()
-  const { filters, offset, limit } = sanitizeQuery(query)
-  const { clause, params } = buildFilterClause(filters)
+  const { scope, filters, offset, limit } = sanitizeQuery(query)
+  const { clause, params } = buildFilterClause(filters, scope)
 
   if (filters.merge) {
     return searchMergedCards(db, filters.merge, clause, params, offset, limit)
@@ -367,6 +418,22 @@ function searchMergedCards(
     limit,
     items: items.map(toSummary)
   }
+}
+
+export function getCardSummaries(cards: Pick<CardSummary, 'collectionId' | 'id'>[]): CardSummary[] {
+  if (cards.length === 0) return []
+
+  const rows = getCardDatabase()
+    .prepare(
+      `SELECT ${SUMMARY_COLUMNS}
+       ${FROM_JOIN}
+       WHERE (c.collection_id, c.id) IN (
+         SELECT json_extract(value, '$.collectionId'), json_extract(value, '$.id')
+         FROM json_each(?)
+       )`
+    )
+    .all(JSON.stringify(cards)) as CardSummaryRow[]
+  return rows.map(toSummary)
 }
 
 export function getCardDetail(collectionId: number, cardId: number): CardDetail | null {
@@ -515,6 +582,7 @@ export function sanitizeQuery(input: unknown): CardListQuery {
   const raw = isRecord(input) ? input : {}
   const filters = isRecord(raw.filters) ? raw.filters : {}
   return {
+    scope: optCardScope(raw.scope),
     offset: clampInt(raw.offset, 0, 1_000_000, 0),
     limit: clampInt(raw.limit, 1, MAX_PAGE_SIZE, DEFAULT_PAGE_SIZE),
     filters: {
@@ -524,9 +592,13 @@ export function sanitizeQuery(input: unknown): CardListQuery {
       collectionIds: optIntList(filters.collectionIds, 500),
       category: optCategory(filters.category),
       attribute: optString(filters.attribute, 16),
-      weaknessType: optWeaknessType(filters.weaknessType),
+      weaknessType: optCombatAttribute(filters.weaknessType),
+      resistanceType: optCombatAttribute(filters.resistanceType),
       evolution: optEvolution(filters.evolution),
       pokemonType: optString(filters.pokemonType, 16),
+      hp: optInt(filters.hp),
+      retreatCost: optInt(filters.retreatCost),
+      specialCard: optString(filters.specialCard, 16),
       rarity: optString(filters.rarity, 16),
       regulationMark: optRegulationMark(filters.regulationMark),
       regulationMarks: optRegulationMarks(filters.regulationMarks),
@@ -623,7 +695,14 @@ function optCategory(value: unknown): string | undefined {
   return /^(card|trainer|energy):[A-Za-z0-9]+$/.test(raw) ? raw : undefined
 }
 
-function optWeaknessType(value: unknown): string | undefined {
+function optCardScope(value: unknown): CardBrowseScope | undefined {
+  if (typeof value === 'string' && Object.hasOwn(CARD_SCOPE_CONDITIONS, value)) {
+    return value as CardBrowseScope
+  }
+  return undefined
+}
+
+function optCombatAttribute(value: unknown): string | undefined {
   const raw = optString(value, 16)
   if (!raw) return undefined
   if (raw === 'none' || /^\d+$/.test(raw)) return raw
@@ -638,8 +717,11 @@ function optEvolution(value: unknown): string | undefined {
   return undefined
 }
 
-function buildFilterClause(filters: CardFilters): { clause: string; params: unknown[] } {
-  const where: string[] = []
+function buildFilterClause(
+  filters: CardFilters,
+  scope?: CardBrowseScope
+): { clause: string; params: unknown[] } {
+  const where = scope ? [CARD_SCOPE_CONDITIONS[scope]] : []
   const params: unknown[] = []
 
   if (filters.keyword) {
@@ -681,6 +763,14 @@ function buildFilterClause(filters: CardFilters): { clause: string; params: unkn
       params.push(filters.weaknessType)
     }
   }
+  if (filters.resistanceType) {
+    if (filters.resistanceType === 'none') {
+      where.push(`(c.resistance_type IS NULL OR c.resistance_type = '')`)
+    } else {
+      where.push('c.resistance_type = ?')
+      params.push(filters.resistanceType)
+    }
+  }
   if (filters.evolution) {
     applyEvolutionFilter(filters.evolution, where, params)
   }
@@ -688,6 +778,18 @@ function buildFilterClause(filters: CardFilters): { clause: string; params: unkn
     // pokemon_type 使用 | 连接多个编码，例如 1|2
     where.push(`instr('|' || IFNULL(c.pokemon_type, '') || '|', '|' || ? || '|') > 0`)
     params.push(filters.pokemonType)
+  }
+  if (filters.hp != null) {
+    where.push('c.hp = ?')
+    params.push(filters.hp)
+  }
+  if (filters.retreatCost != null) {
+    where.push('c.retreat_cost = ?')
+    params.push(filters.retreatCost)
+  }
+  if (filters.specialCard) {
+    where.push(`instr(',' || IFNULL(c.special_card, '') || ',', ',' || ? || ',') > 0`)
+    params.push(filters.specialCard)
   }
   if (filters.rarity) {
     where.push('c.rarity = ?')

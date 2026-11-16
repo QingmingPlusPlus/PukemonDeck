@@ -1,21 +1,29 @@
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
-import type { CardDatabaseApi } from '../shared/card-db'
-import type { CardImageApi, CardImageProgress } from '../shared/card-image'
+import type { CardImageProgress } from '../shared/card-image'
+import type { PukemonDeckApi } from './index.d'
 
 // Custom APIs for renderer
-const api: { cardDb: CardDatabaseApi; cardImage: CardImageApi } = {
+const api: PukemonDeckApi = {
   cardDb: {
     status: () => ipcRenderer.invoke('card-db:status'),
     reload: () => ipcRenderer.invoke('card-db:reload'),
     pickAndImport: () => ipcRenderer.invoke('card-db:pick-and-import'),
     importFromPath: (filePath: string) => ipcRenderer.invoke('card-db:import-from-path', filePath),
+    clearImported: () => ipcRenderer.invoke('card-db:clear-imported'),
     getPathForFile: (file: File) => webUtils.getPathForFile(file),
-    getFilterOptions: () => ipcRenderer.invoke('card-db:filter-options'),
+    getFilterOptions: (scope) => ipcRenderer.invoke('card-db:filter-options', scope),
     listCollections: (query) => ipcRenderer.invoke('card-db:collections', query),
     searchCards: (query) => ipcRenderer.invoke('card-db:search', query),
     getCardDetail: (collectionId, cardId) =>
       ipcRenderer.invoke('card-db:detail', collectionId, cardId)
+  },
+  decks: {
+    list: () => ipcRenderer.invoke('decks:list'),
+    create: (name) => ipcRenderer.invoke('decks:create', name),
+    setDefault: (deckId) => ipcRenderer.invoke('decks:set-default', deckId),
+    getCards: (deckId) => ipcRenderer.invoke('decks:cards', deckId),
+    addCard: (collectionId, cardId) => ipcRenderer.invoke('decks:add-card', collectionId, cardId)
   },
   cardImage: {
     status: () => ipcRenderer.invoke('card-image:status'),

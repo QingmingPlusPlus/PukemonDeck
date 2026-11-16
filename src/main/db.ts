@@ -8,6 +8,7 @@ import {
   readSync,
   closeSync,
   renameSync,
+  rmSync,
   unlinkSync
 } from 'fs'
 import { dirname, join } from 'path'
@@ -67,7 +68,7 @@ function getOpenPath(): string {
  * 解析顺序：用户导入副本 → 开发环境或手动放置的外部副本。
  * 若导入副本存在但无法打开，不会回退到外部副本，以免掩盖损坏文件。
  */
-export function openCardDatabase(): CardDatabaseStatus {
+export function openCardDatabase(reportMissing = true): CardDatabaseStatus {
   closeCardDatabase()
 
   const imported = getImportedCardDatabasePath()
@@ -80,7 +81,7 @@ export function openCardDatabase(): CardDatabaseStatus {
     return tryOpenCardDatabase(bundled, 'bundled')
   }
 
-  cardDbError = '未找到卡牌数据库文件'
+  cardDbError = reportMissing ? '未找到卡牌数据库文件' : null
   cardDbPath = bundled
   cardDbSource = null
   return getCardDatabaseStatus()
@@ -148,6 +149,37 @@ export async function pickAndImportCardDatabase(
   return importCardDatabase(result.filePaths[0])
 }
 
+export async function confirmAndClearCardDatabase(
+  browserWindow?: BrowserWindow | null
+): Promise<CardDatabaseStatus> {
+  const path = getImportedCardDatabasePath()
+  if (!existsSync(path)) return openCardDatabase(false)
+
+  const options: Electron.MessageBoxOptions = {
+    type: 'warning',
+    message: '删除已导入的牌库数据库副本？',
+    buttons: ['取消', '清除'],
+    defaultId: 0,
+    cancelId: 0,
+    noLink: true
+  }
+  const { response } = browserWindow
+    ? await dialog.showMessageBox(browserWindow, options)
+    : await dialog.showMessageBox(options)
+
+  if (response !== 1) return { ...getCardDatabaseStatus(), cancelled: true }
+
+  try {
+    closeCardDatabase()
+    rmSync(path, { force: true })
+  } catch (error) {
+    const status = cardDb ? getCardDatabaseStatus() : openCardDatabase(false)
+    return { ...status, error: `清除牌库数据库失败：${toCardDbError(error)}` }
+  }
+
+  return openCardDatabase(false)
+}
+
 /**
  * 校验源文件后复制到 userData/data/deck.db（先拷到临时文件再重命名），
  * 然后重新以只读方式打开。
@@ -210,10 +242,35 @@ export function getUserDatabase(): Database.Database {
   const dir = join(app.getPath('userData'), 'data')
   mkdirSync(dir, { recursive: true })
 
-  userDb = new Database(join(dir, 'pukemondeck.db'))
-  userDb.pragma('journal_mode = WAL')
-  userDb.pragma('foreign_keys = ON')
+  const db = new Database(join(dir, 'pukemondeck.db'))
+  try {
+    db.pragma('journal_mode = WAL')
+    db.pragma('foreign_keys = ON')
+    db.transaction(() => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS user_deck (
+          id INTEGER PRIMARY KEY,
+          name TEXT NOT NULL,
+          is_default INTEGER NOT NULL CHECK (is_default IN (0, 1))
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS user_deck_default ON user_deck (is_default)
+          WHERE is_default = 1;
+        CREATE TABLE IF NOT EXISTS user_deck_card (
+          deck_id INTEGER NOT NULL REFERENCES user_deck (id) ON DELETE CASCADE,
+          collection_id INTEGER NOT NULL,
+          card_id INTEGER NOT NULL,
+          snapshot TEXT NOT NULL,
+          quantity INTEGER NOT NULL CHECK (quantity > 0),
+          PRIMARY KEY (deck_id, collection_id, card_id)
+        );
+      `)
+    })()
+  } catch (error) {
+    db.close()
+    throw error
+  }
 
+  userDb = db
   return userDb
 }
 

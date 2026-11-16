@@ -19,60 +19,92 @@ export function CardGridSkeleton(): React.JSX.Element {
 }
 
 interface CardTileProps {
-  card: CardSummary
+  card: CardGridItem
   onSelect: (card: CardSummary) => void
+  onAddCard?: (card: CardSummary) => void
 }
 
-function CardTile({ card, onSelect }: CardTileProps): React.JSX.Element {
+type CardGridItem = CardSummary & { quantity?: number; unavailable?: boolean }
+
+function CardTile({ card, onSelect, onAddCard }: CardTileProps): React.JSX.Element {
   const kind =
     card.attributeText ?? card.trainerTypeText ?? card.energyTypeText ?? card.cardTypeText
   const meta = [card.rarityText, card.evolveText].filter(Boolean).join(' · ')
 
   return (
-    <button type="button" className="card-tile" title={card.name} onClick={() => onSelect(card)}>
-      <div className="card-tile__visual">
-        <CardImage
-          src={card.imageUrl}
-          alt={card.name}
-          className="card-tile__image"
-          fallback={
-            <span className="card-tile__placeholder">
-              <Icon name="image" size={22} />
-              <span className="sr-only">暂无卡图</span>
-            </span>
-          }
-        />
-      </div>
-      <h2 className="card-tile__name">{card.name}</h2>
-      <div className="card-tile__meta-row">
-        {kind && <span className="card-tile__kind">{kind}</span>}
-        {meta && <span className="card-tile__meta">{meta}</span>}
-        {card.hp != null && <span className="card-tile__hp">HP {card.hp}</span>}
-      </div>
-      <div className="card-tile__footer">
-        <span className="card-tile__set" title={card.collectionName}>
-          {card.collectionName}
+    <div className="card-tile-wrap">
+      <button
+        type="button"
+        className="card-tile"
+        title={card.name}
+        disabled={card.unavailable}
+        onClick={() => onSelect(card)}
+      >
+        <div className="card-tile__visual">
+          <CardImage
+            src={card.imageUrl}
+            alt={card.name}
+            className="card-tile__image"
+            fallback={
+              <span className="card-tile__placeholder">
+                <Icon name="image" size={22} />
+                {card.unavailable ? (
+                  <span>当前牌库缺失</span>
+                ) : (
+                  <span className="sr-only">暂无卡图</span>
+                )}
+              </span>
+            }
+          />
+        </div>
+        <h2 className="card-tile__name">{card.name}</h2>
+        <div className="card-tile__meta-row">
+          {kind && <span className="card-tile__kind">{kind}</span>}
+          {meta && <span className="card-tile__meta">{meta}</span>}
+          {card.hp != null && <span className="card-tile__hp">HP {card.hp}</span>}
+        </div>
+        <div className="card-tile__footer">
+          <span className="card-tile__set" title={card.collectionName}>
+            {card.collectionName}
+          </span>
+          <span className="card-tile__number">
+            {card.collectionNumber}
+            {card.regulationMarkText ? ` · ${card.regulationMarkText}` : ''}
+          </span>
+        </div>
+      </button>
+      {onAddCard && (
+        <button
+          type="button"
+          className="icon-button card-tile__action"
+          aria-label={`将${card.name}添加到默认牌组`}
+          title="添加到默认牌组"
+          onClick={() => onAddCard(card)}
+        >
+          <Icon name="plus" size={18} />
+        </button>
+      )}
+      {card.quantity != null && (
+        <span className="card-tile__quantity" aria-label={`${card.name} ${card.quantity} 张`}>
+          ×{card.quantity}
         </span>
-        <span className="card-tile__number">
-          {card.collectionNumber}
-          {card.regulationMarkText ? ` · ${card.regulationMarkText}` : ''}
-        </span>
-      </div>
-    </button>
+      )}
+    </div>
   )
 }
 
 export interface CardResultPaneProps {
-  items: CardSummary[]
+  items: CardGridItem[]
   loading: boolean
-  loadingMore: boolean
+  loadingMore?: boolean
   error: string | null
-  hasMore: boolean
+  hasMore?: boolean
   emptyIcon?: IconName
   emptyText: string
   emptyAction?: ReactNode
   onRetry: () => void
-  onLoadMore: () => void
+  onLoadMore?: () => void
+  onAddCard?: (card: CardSummary) => void
 }
 
 export function CardResultPane({
@@ -85,7 +117,8 @@ export function CardResultPane({
   emptyText,
   emptyAction,
   onRetry,
-  onLoadMore
+  onLoadMore,
+  onAddCard
 }: CardResultPaneProps): React.JSX.Element {
   const [detail, setDetail] = useState<CardDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
@@ -95,7 +128,7 @@ export function CardResultPane({
 
   useEffect(() => {
     const node = sentinelRef.current
-    if (!node || !hasMore || error) return
+    if (!node || !hasMore || !onLoadMore || error) return
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries.some((entry) => entry.isIntersecting) && !loading && !loadingMore) {
@@ -162,6 +195,7 @@ export function CardResultPane({
               key={`${card.collectionId}-${card.id}`}
               card={card}
               onSelect={(item) => void openDetail(item)}
+              onAddCard={onAddCard}
             />
           ))}
         </div>
@@ -187,6 +221,7 @@ export function CardResultPane({
           loading={detailLoading}
           error={detailError}
           onClose={closeDetail}
+          onAddCard={onAddCard}
         />
       )}
     </div>
