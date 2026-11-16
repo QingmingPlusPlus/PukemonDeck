@@ -26,16 +26,16 @@ let userDb: Database.Database | null = null
 
 /**
  * 用户导入的卡牌库路径。位于每用户数据目录，重启后仍保留，
- * 优先于随应用分发的打包副本。
+ * 优先于开发环境或手动放置的外部副本。
  */
 export function getImportedCardDatabasePath(): string {
   return join(app.getPath('userData'), 'data', 'deck.db')
 }
 
 /**
- * 随应用分发的卡牌库路径（打包时由 scripts/after-pack.cjs 写入）。
+ * 可选的外部卡牌库路径，默认安装包不包含数据库。
  * - 开发/预览：项目根的 data/deck.db
- * - 打包后：<resourcesPath>/db/deck.db
+ * - 打包后：<resourcesPath>/db/deck.db（可手动放置）
  */
 export function getBundledCardDatabasePath(): string {
   if (app.isPackaged) {
@@ -47,8 +47,8 @@ export function getBundledCardDatabasePath(): string {
 /**
  * 按解析顺序得到当前应使用的卡牌库路径：
  * 1. 用户导入的副本（userData/data/deck.db）
- * 2. 随应用分发的副本
- * 两者都不存在时返回打包/开发期的分发路径，便于在状态中提示。
+ * 2. 开发环境或手动放置的外部副本
+ * 两者都不存在时返回外部副本路径，便于在状态中提示。
  */
 export function getCardDatabasePath(): string {
   const imported = getImportedCardDatabasePath()
@@ -64,8 +64,8 @@ function getOpenPath(): string {
  * 打开只读卡牌库。失败时不抛异常，而是记录原因，
  * 由渲染进程根据 getCardDatabaseStatus() 显示导入页。
  *
- * 解析顺序：用户导入副本 → 随应用分发的副本。
- * 若导入副本存在但无法打开，不会回退到分发副本，以免掩盖损坏文件。
+ * 解析顺序：用户导入副本 → 开发环境或手动放置的外部副本。
+ * 若导入副本存在但无法打开，不会回退到外部副本，以免掩盖损坏文件。
  */
 export function openCardDatabase(): CardDatabaseStatus {
   closeCardDatabase()
@@ -154,33 +154,19 @@ export async function pickAndImportCardDatabase(
  */
 export function importCardDatabase(sourcePath: string): CardDatabaseStatus {
   if (typeof sourcePath !== 'string' || sourcePath.trim() === '') {
-    return {
-      ok: false,
-      path: getOpenPath(),
-      error: '无效的文件路径',
-      source: cardDbSource
-    }
+    return { ...getCardDatabaseStatus(), error: '无效的文件路径' }
   }
 
   const source = sourcePath.trim()
   if (!existsSync(source)) {
-    return {
-      ok: false,
-      path: source,
-      error: '未找到所选文件',
-      source: cardDbSource
-    }
+    return { ...getCardDatabaseStatus(), error: '未找到所选文件' }
   }
 
   try {
     assertValidCardDatabase(source)
   } catch (error) {
-    return {
-      ok: false,
-      path: source,
-      error: toCardDbError(error),
-      source: cardDbSource
-    }
+    // 新文件校验失败时保留当前数据库连接和设置页状态。
+    return { ...getCardDatabaseStatus(), error: toCardDbError(error) }
   }
 
   // 校验通过后再关闭已打开的句柄，避免校验失败时中断当前连接。

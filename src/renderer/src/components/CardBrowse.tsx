@@ -156,7 +156,7 @@ function CardBrowse(): React.JSX.Element {
     <div className="browse">
       <header className="browse__toolbar">
         <div className="browse__title-row">
-          <h1 className="browse__title">PukemonDeck</h1>
+          <h1 className="browse__title">牌库</h1>
           <p className="browse__count">
             {loading && items.length === 0
               ? '正在查询…'

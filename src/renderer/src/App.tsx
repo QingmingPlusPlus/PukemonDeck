@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react'
 import ImportData from './components/ImportData'
 import CardBrowse from './components/CardBrowse'
+import Settings from './components/Settings'
 import type { CardDatabaseStatus } from '../../shared/card-db'
+
+type AppTab = 'cards' | 'settings'
 
 function App(): React.JSX.Element {
   const [status, setStatus] = useState<CardDatabaseStatus | null>(null)
   const [importing, setImporting] = useState(false)
+  const [activeTab, setActiveTab] = useState<AppTab>('cards')
 
   useEffect(() => {
     window.api.cardDb.status().then(setStatus)
@@ -67,7 +71,49 @@ function App(): React.JSX.Element {
     )
   }
 
-  return <CardBrowse />
+  return (
+    <div className="app-shell">
+      <nav className="app-tabs" aria-label="主导航" role="tablist">
+        <span className="app-tabs__brand">PukemonDeck</span>
+        <button
+          id="cards-tab"
+          className={`app-tabs__tab${activeTab === 'cards' ? ' app-tabs__tab--active' : ''}`}
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'cards'}
+          aria-controls="cards-panel"
+          disabled={importing}
+          onClick={() => setActiveTab('cards')}
+        >
+          牌库
+        </button>
+        <button
+          id="settings-tab"
+          className={`app-tabs__tab${activeTab === 'settings' ? ' app-tabs__tab--active' : ''}`}
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'settings'}
+          aria-controls="settings-panel"
+          disabled={importing}
+          onClick={() => setActiveTab('settings')}
+        >
+          设置
+        </button>
+      </nav>
+      <div
+        id={`${activeTab}-panel`}
+        className="app-content"
+        role="tabpanel"
+        aria-labelledby={`${activeTab}-tab`}
+      >
+        {activeTab === 'cards' ? (
+          <CardBrowse />
+        ) : (
+          <Settings status={status} importing={importing} onImport={handlePick} />
+        )}
+      </div>
+    </div>
+  )
 }
 
 export default App
