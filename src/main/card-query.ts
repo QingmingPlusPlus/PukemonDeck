@@ -9,6 +9,7 @@ import type {
   CardFilters,
   CardListQuery,
   CardListResult,
+  CardMergeMode,
   CardSkillInfo,
   CardSummary,
   CollectionOption,
@@ -93,6 +94,109 @@ const FROM_JOIN = `
     ON attr.type_code = 'attribute' AND attr.dict_code = c.attribute
 `
 
+/**
+ * 相同卡牌签名：玩法字段 + 招式/特性/技能文本。
+ * 不使用 name_same_pokemon_id（同名但 HP/招式可能不同，如不同的皮卡丘）。
+ * 也不纳入 special_shiny_type（C / C★ 等印刷差）。
+ */
+const CARD_SIGNATURE_CTE = `
+ability_sig AS (
+  SELECT
+    collection_id,
+    card_id,
+    group_concat(
+      ability_name || char(31) || ifnull(ability_text, '') || char(31) || ifnull(ability_cost, '') || char(31) || ifnull(ability_damage, ''),
+      char(30) ORDER BY ability_name
+    ) AS sig
+  FROM ptcg_card_ability
+  GROUP BY collection_id, card_id
+),
+feature_sig AS (
+  SELECT
+    collection_id,
+    card_id,
+    group_concat(
+      feature_name || char(31) || feature_desc,
+      char(30) ORDER BY feature_name
+    ) AS sig
+  FROM ptcg_card_feature
+  GROUP BY collection_id, card_id
+),
+skill_sig AS (
+  SELECT
+    collection_id,
+    card_id,
+    group_concat(
+      name || char(31) || description || char(31) || ifnull(cost, '') || char(31) || ifnull(damage, ''),
+      char(30) ORDER BY name
+    ) AS sig
+  FROM ptcg_card_skill
+  GROUP BY collection_id, card_id
+)
+`
+
+const MERGE_FROM_JOIN = `
+  ${FROM_JOIN}
+  LEFT JOIN ability_sig ab
+    ON ab.collection_id = c.collection_id AND ab.card_id = c.id
+  LEFT JOIN feature_sig ft
+    ON ft.collection_id = c.collection_id AND ft.card_id = c.id
+  LEFT JOIN skill_sig sk
+    ON sk.collection_id = c.collection_id AND sk.card_id = c.id
+  LEFT JOIN ptcg_dict rarity_dict
+    ON rarity_dict.type_code = 'rarity' AND rarity_dict.dict_code = c.rarity
+`
+
+const IDENTITY_COLUMNS = `
+  c.name AS ident_name,
+  c.card_type AS ident_card_type,
+  ifnull(c.hp, -1) AS ident_hp,
+  ifnull(c.attribute, '') AS ident_attribute,
+  ifnull(c.evolve_text, '') AS ident_evolve,
+  ifnull(c.pokemon_type, '') AS ident_pokemon_type,
+  ifnull(c.rule_text, '') AS ident_rule_text,
+  ifnull(c.trainer_type, '') AS ident_trainer_type,
+  ifnull(c.energy_type, '') AS ident_energy_type,
+  ifnull(c.weakness_type, '') AS ident_weakness_type,
+  ifnull(c.weakness_formula, '') AS ident_weakness_formula,
+  ifnull(c.resistance_type, '') AS ident_resistance_type,
+  ifnull(c.resistance_formula, '') AS ident_resistance_formula,
+  ifnull(c.retreat_cost, -1) AS ident_retreat_cost,
+  ifnull(c.special_card, '') AS ident_special_card,
+  ifnull(c.pokemon_category, '') AS ident_pokemon_category,
+  ifnull(ab.sig, '') AS ident_abilities,
+  ifnull(ft.sig, '') AS ident_features,
+  ifnull(sk.sig, '') AS ident_skills
+`
+
+const IDENTITY_PARTITION = `
+  ident_name, ident_card_type, ident_hp, ident_attribute, ident_evolve,
+  ident_pokemon_type, ident_rule_text, ident_trainer_type, ident_energy_type,
+  ident_weakness_type, ident_weakness_formula, ident_resistance_type,
+  ident_resistance_formula, ident_retreat_cost, ident_special_card,
+  ident_pokemon_category, ident_abilities, ident_features, ident_skills
+`
+
+// 稀有度主序用 ptcg_dict.dict_sort；字典没有的 22=ACE、96=空白回退到数字编码。
+// 同一编码下再比较 rarity_text 后缀：无 < ★ < ★★ < ★★★ < ◇ < ✦ < ✧。
+const RARITY_SORT_SQL = `coalesce(rarity_dict.dict_sort, cast(c.rarity AS INTEGER), 1000)`
+
+const RARITY_SUFFIX_SQL = `
+  CASE
+    WHEN c.rarity_text GLOB '*✦✦✦' THEN 23
+    WHEN c.rarity_text GLOB '*✦✦' THEN 22
+    WHEN c.rarity_text GLOB '*✦' THEN 21
+    WHEN c.rarity_text GLOB '*✧' THEN 31
+    WHEN c.rarity_text GLOB '*◇◇◇' THEN 13
+    WHEN c.rarity_text GLOB '*◇◇' THEN 12
+    WHEN c.rarity_text GLOB '*◇' THEN 11
+    WHEN c.rarity_text GLOB '*★★★' THEN 3
+    WHEN c.rarity_text GLOB '*★★' THEN 2
+    WHEN c.rarity_text GLOB '*★' THEN 1
+    ELSE 0
+  END
+`
+
 export function getFilterOptions(): CardFilterOptions {
   const db = getCardDatabase()
 
@@ -140,6 +244,10 @@ export function searchCards(query: CardListQuery): CardListResult {
   const { filters, offset, limit } = sanitizeQuery(query)
   const { clause, params } = buildFilterClause(filters)
 
+  if (filters.merge) {
+    return searchMergedCards(db, filters.merge, clause, params, offset, limit)
+  }
+
   const totalRow = db.prepare(`SELECT COUNT(*) AS total ${FROM_JOIN} ${clause}`).get(...params) as {
     total: number
   }
@@ -150,6 +258,88 @@ export function searchCards(query: CardListQuery): CardListResult {
        ${FROM_JOIN}
        ${clause}
        ORDER BY col.sales_date DESC, c.collection_id DESC, c.collection_number ASC, c.id ASC
+       LIMIT ? OFFSET ?`
+    )
+    .all(...params, limit, offset) as CardSummaryRow[]
+
+  return {
+    total: totalRow.total,
+    offset,
+    limit,
+    items: items.map(toSummary)
+  }
+}
+
+function searchMergedCards(
+  db: ReturnType<typeof getCardDatabase>,
+  merge: CardMergeMode,
+  clause: string,
+  params: unknown[],
+  offset: number,
+  limit: number
+): CardListResult {
+  const direction = merge === 'highest' ? 'DESC' : 'ASC'
+  const rankedCte = `
+    WITH ${CARD_SIGNATURE_CTE},
+    filtered AS (
+      SELECT
+        ${SUMMARY_COLUMNS},
+        ${IDENTITY_COLUMNS},
+        ${RARITY_SORT_SQL} AS rarity_sort,
+        ${RARITY_SUFFIX_SQL} AS rarity_suffix,
+        col.sales_date AS sales_date
+      ${MERGE_FROM_JOIN}
+      ${clause}
+    ),
+    ranked AS (
+      SELECT *
+      FROM (
+        SELECT
+          filtered.*,
+          row_number() OVER (
+            PARTITION BY ${IDENTITY_PARTITION}
+            ORDER BY
+              rarity_sort ${direction},
+              rarity_suffix ${direction},
+              sales_date DESC,
+              collection_id DESC,
+              collection_number ASC,
+              id ASC
+          ) AS rn
+        FROM filtered
+      )
+      WHERE rn = 1
+    )
+  `
+
+  const totalRow = db
+    .prepare(`${rankedCte} SELECT COUNT(*) AS total FROM ranked`)
+    .get(...params) as {
+    total: number
+  }
+
+  const items = db
+    .prepare(
+      `${rankedCte}
+       SELECT
+         collection_id,
+         id,
+         name,
+         collection_name,
+         series_text,
+         collection_number,
+         card_type,
+         card_type_text,
+         rarity_text,
+         regulation_mark_text,
+         hp,
+         attribute_text,
+         evolve_text,
+         trainer_type_text,
+         energy_type_text,
+         image
+       FROM ranked
+       ORDER BY sales_date DESC, collection_id DESC, collection_number ASC, id ASC
        LIMIT ? OFFSET ?`
     )
     .all(...params, limit, offset) as CardSummaryRow[]
@@ -320,7 +510,8 @@ export function sanitizeQuery(input: unknown): CardListQuery {
       evolution: optEvolution(filters.evolution),
       pokemonType: optString(filters.pokemonType, 16),
       rarity: optString(filters.rarity, 16),
-      regulationMark: optString(filters.regulationMark, 16)
+      regulationMark: optString(filters.regulationMark, 16),
+      merge: optMerge(filters.merge)
     }
   }
 }
@@ -550,6 +741,10 @@ function optString(value: unknown, maxLength: number): string | undefined {
   const trimmed = value.trim()
   if (trimmed === '') return undefined
   return trimmed.slice(0, maxLength)
+}
+
+function optMerge(value: unknown): CardMergeMode | undefined {
+  return value === 'lowest' || value === 'highest' ? value : undefined
 }
 
 function optInt(value: unknown): number | undefined {

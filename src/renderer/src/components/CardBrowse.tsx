@@ -238,6 +238,24 @@ function CardBrowse(): React.JSX.Element {
             options={options?.categories}
             onChange={(value) => updateFilter('category', value)}
           />
+          <select
+            className="browse__select browse__select--wide"
+            aria-label="合并相同卡牌"
+            title="合并相同卡牌"
+            value={filters.merge ?? ''}
+            onChange={(event) =>
+              updateFilter(
+                'merge',
+                event.target.value === 'lowest' || event.target.value === 'highest'
+                  ? event.target.value
+                  : undefined
+              )
+            }
+          >
+            <option value="">合并相同卡牌</option>
+            <option value="lowest">只显示最低稀有度</option>
+            <option value="highest">只显示最高稀有度</option>
+          </select>
 
           <button
             className={`icon-button${showAdvanced ? ' icon-button--active' : ''}`}
