@@ -15,6 +15,7 @@ import type {
   CollectionOption,
   DictOption
 } from '../shared/card-query'
+import { rarityClassRankSql, raritySuffixRankSql, sortRarityOptions } from '../shared/rarity-order'
 
 export const DEFAULT_PAGE_SIZE = 48
 export const MAX_PAGE_SIZE = 100
@@ -143,8 +144,6 @@ const MERGE_FROM_JOIN = `
     ON ft.collection_id = c.collection_id AND ft.card_id = c.id
   LEFT JOIN skill_sig sk
     ON sk.collection_id = c.collection_id AND sk.card_id = c.id
-  LEFT JOIN ptcg_dict rarity_dict
-    ON rarity_dict.type_code = 'rarity' AND rarity_dict.dict_code = c.rarity
 `
 
 const IDENTITY_COLUMNS = `
@@ -177,25 +176,9 @@ const IDENTITY_PARTITION = `
   ident_pokemon_category, ident_abilities, ident_features, ident_skills
 `
 
-// 稀有度主序用 ptcg_dict.dict_sort；字典没有的 22=ACE、96=空白回退到数字编码。
-// 同一编码下再比较 rarity_text 后缀：无 < ★ < ★★ < ★★★ < ◇ < ✦ < ✧。
-const RARITY_SORT_SQL = `coalesce(rarity_dict.dict_sort, cast(c.rarity AS INTEGER), 1000)`
-
-const RARITY_SUFFIX_SQL = `
-  CASE
-    WHEN c.rarity_text GLOB '*✦✦✦' THEN 23
-    WHEN c.rarity_text GLOB '*✦✦' THEN 22
-    WHEN c.rarity_text GLOB '*✦' THEN 21
-    WHEN c.rarity_text GLOB '*✧' THEN 31
-    WHEN c.rarity_text GLOB '*◇◇◇' THEN 13
-    WHEN c.rarity_text GLOB '*◇◇' THEN 12
-    WHEN c.rarity_text GLOB '*◇' THEN 11
-    WHEN c.rarity_text GLOB '*★★★' THEN 3
-    WHEN c.rarity_text GLOB '*★★' THEN 2
-    WHEN c.rarity_text GLOB '*★' THEN 1
-    ELSE 0
-  END
-`
+// 稀有度顺序见 src/shared/rarity-order.ts（档位 + 工艺后缀，不使用 dict_sort）。
+const RARITY_SORT_SQL = rarityClassRankSql('c.rarity')
+const RARITY_SUFFIX_SQL = raritySuffixRankSql('c.rarity_text')
 
 export function getFilterOptions(): CardFilterOptions {
   const db = getCardDatabase()
@@ -227,7 +210,7 @@ export function getFilterOptions(): CardFilterOptions {
     weaknessTypes: [{ code: 'none', label: '无弱点' }, ...loadDict('weakness_type')],
     evolutions: buildEvolutionOptions(db, loadDict),
     pokemonTypes: loadDict('pokemon_type'),
-    rarities: loadDict('rarity'),
+    rarities: sortRarityOptions(loadDict('rarity')),
     regulationMarks: loadDict('regulation_mark'),
     collections: collections.map((row): CollectionOption => ({
       id: row.id,
