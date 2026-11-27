@@ -15,6 +15,8 @@ export type IconName =
   | 'check'
   | 'star'
   | 'deck'
+  | 'settings'
+  | 'arrow-left'
 
 const PATHS: Record<IconName, ReactNode> = {
   search: (
@@ -88,7 +90,14 @@ const PATHS: Record<IconName, ReactNode> = {
       <rect x="8" y="3" width="12" height="16" rx="2" />
       <path d="M4 7v12a4 4 0 0 0 4 4h8" />
     </>
-  )
+  ),
+  settings: (
+    <>
+      <path d="m10 3.5-.5 2.4-1.6.9-2.4-.8-2 3.5 1.8 1.6v1.8l-1.8 1.6 2 3.5 2.4-.8 1.6.9.5 2.4h4l.5-2.4 1.6-.9 2.4.8 2-3.5-1.8-1.6v-1.8l1.8-1.6-2-3.5-2.4.8-1.6-.9-.5-2.4Z" />
+      <circle cx="12" cy="12" r="3" />
+    </>
+  ),
+  'arrow-left': <path d="m12 5-7 7 7 7M5 12h14" />
 }
 
 interface IconProps {

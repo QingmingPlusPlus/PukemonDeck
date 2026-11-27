@@ -66,10 +66,10 @@ function Settings({
               className="button button--primary"
               type="button"
               disabled={busy}
-              title="选择新的数据库文件并覆盖当前数据"
+              title={status.ok ? '选择新的数据库文件并覆盖当前数据' : '选择数据库文件'}
               onClick={onImport}
             >
-              {importing ? '导入中…' : '更换'}
+              {importing ? '导入中…' : status.ok ? '更换' : '导入'}
             </button>
           </div>
         </div>
@@ -114,7 +114,7 @@ function Settings({
             <button
               className="button button--primary"
               type="button"
-              disabled={busy}
+              disabled={busy || !status.ok}
               title="选择包含 img 的文件夹；再次导入会替换当前图片"
               onClick={onImportImages}
             >

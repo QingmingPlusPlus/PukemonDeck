@@ -294,6 +294,48 @@ code {
   background-size: cover, cover;
 }
 
+.home {
+  width: min(100% - 48px, 560px);
+  text-align: center;
+}
+
+.home__title {
+  margin-bottom: 28px;
+  font-size: 40px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+}
+
+.home__links {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.home__link {
+  flex-direction: column;
+  gap: 14px;
+  height: 132px;
+  border-color: var(--border);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-background-soft);
+  font-size: 15px;
+}
+
+.home__link:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.home__icon {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  border-radius: var(--radius-md);
+  background-color: var(--accent-soft);
+  color: var(--accent-text);
+}
+
 .app-shell {
   display: flex;
   flex-direction: column;
@@ -322,22 +364,17 @@ code {
   margin-left: auto;
 }
 
-.app-centered > .theme-toggle {
-  position: absolute;
-  top: 8px;
-  right: 20px;
-}
-
 .theme-toggle:hover {
   background-color: var(--color-background-mute);
 }
 
-.app-tabs__brand {
-  margin-right: 18px;
+.app-header__home {
+  margin-right: 12px;
+}
+
+.app-header__title {
   font-size: 15px;
   font-weight: 700;
-  letter-spacing: -0.01em;
-  color: var(--color-text);
 }
 
 .app-tabs__tab {
@@ -381,6 +418,10 @@ code {
 .app-content {
   flex: 1;
   min-height: 0;
+}
+
+.app-content > [role='tabpanel'] {
+  height: 100%;
 }
 
 /* ---------- 导入页 ---------- */

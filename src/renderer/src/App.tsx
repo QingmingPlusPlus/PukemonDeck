@@ -9,6 +9,15 @@ import type { CardDatabaseStatus } from '../../shared/card-db'
 import type { CardImageProgress, CardImageStatus } from '../../shared/card-image'
 import type { CardSummary } from '../../shared/card-query'
 
+const HOME_PAGES = {
+  decks: { label: '牌组', icon: 'deck' },
+  settings: { label: '设置', icon: 'settings' },
+  temp: { label: '测试 Temp', icon: 'database' }
+} as const
+
+type HomePage = keyof typeof HOME_PAGES
+const HOME_LINKS = Object.keys(HOME_PAGES) as HomePage[]
+
 const TAB_LABELS = {
   cards: '牌库',
   pokemon: '宝可梦',
@@ -16,8 +25,7 @@ const TAB_LABELS = {
   item: '物品',
   energy: '能量',
   collections: '集合',
-  decks: '牌组',
-  settings: '设置'
+  decks: '牌组'
 }
 
 type AppTab = keyof typeof TAB_LABELS
@@ -38,6 +46,7 @@ function App(): React.JSX.Element {
   const [importing, setImporting] = useState(false)
   const [clearing, setClearing] = useState(false)
   const [imageImporting, setImageImporting] = useState(false)
+  const [page, setPage] = useState<'home' | HomePage>('home')
   const [activeTab, setActiveTab] = useState<AppTab>('cards')
   const [addFeedback, setAddFeedback] = useState<AddFeedback | null>(null)
   const imageBusy = imageImporting || Boolean(imageStatus?.importing)
@@ -58,7 +67,17 @@ function App(): React.JSX.Element {
   }, [addFeedback])
 
   useEffect(() => {
-    window.api.cardDb.status().then(setStatus)
+    window.api.cardDb
+      .status()
+      .then(setStatus)
+      .catch((error: unknown) => {
+        setStatus({
+          ok: false,
+          path: '',
+          source: null,
+          error: error instanceof Error ? error.message : '读取牌库状态失败'
+        })
+      })
     window.api.cardImage
       .status()
       .then(setImageStatus)
@@ -199,119 +218,163 @@ function App(): React.JSX.Element {
     setActiveTab(nextTab)
   }
 
-  if (!status || !imageStatus) {
+  if (page === 'home') {
     return (
-      <div className="app-centered">
-        <span className="spinner spinner--lg" role="status" aria-label="正在加载卡牌数据" />
-      </div>
+      <main className="app-centered">
+        <div className="home">
+          <h1 className="home__title">PukemonDeck</h1>
+          <nav className="home__links" aria-label="主导航">
+            {HOME_LINKS.map((destination) => (
+              <button
+                key={destination}
+                className="button home__link"
+                type="button"
+                onClick={() => setPage(destination)}
+              >
+                <span className="home__icon">
+                  <Icon name={HOME_PAGES[destination].icon} size={24} />
+                </span>
+                {HOME_PAGES[destination].label}
+              </button>
+            ))}
+          </nav>
+        </div>
+      </main>
     )
   }
 
+  let pageContent: React.ReactNode = null
+  if (page !== 'decks') {
+    if (!status || !imageStatus) {
+      pageContent = (
+        <div className="app-centered">
+          <span className="spinner spinner--lg" role="status" aria-label="正在加载卡牌数据" />
+        </div>
+      )
+    } else if (page === 'settings') {
+      pageContent = (
+        <Settings
+          status={status}
+          busy={busy}
+          importing={importing}
+          clearing={clearing}
+          onImport={handlePick}
+          onClear={handleClear}
+          imageStatus={imageStatus}
+          imageProgress={imageProgress}
+          imageImporting={imageBusy}
+          onImportImages={handleImagePick}
+          onCancelImages={handleImageCancel}
+        />
+      )
+    } else if (!status.ok) {
+      pageContent = (
+        <div className="app-centered">
+          <ImportData
+            status={status}
+            importing={busy}
+            onPick={handlePick}
+            onDropFile={handleDropFile}
+          />
+        </div>
+      )
+    } else {
+      pageContent = (
+        <div id="app-panel" role="tabpanel" aria-labelledby={`${activeTab}-tab`}>
+          {activeTab === 'decks' ? (
+            <DeckBrowse onBrowseCards={() => setActiveTab('cards')} />
+          ) : activeTab === 'collections' ? (
+            <CollectionBrowse onAddCard={handleAddCard} />
+          ) : (
+            <CardBrowse
+              key={activeTab}
+              scope={activeTab === 'cards' ? undefined : activeTab}
+              title={TAB_LABELS[activeTab]}
+              onAddCard={handleAddCard}
+            />
+          )}
+        </div>
+      )
+    }
+  }
+
+  const showTabs = page === 'temp' && status?.ok === true && imageStatus !== null
   const nextTheme = theme === 'dark' ? 'light' : 'dark'
   const themeLabel = nextTheme === 'light' ? '切换到浅色主题' : '切换到深色主题'
-  const themeButton = (
-    <button
-      className="icon-button theme-toggle"
-      type="button"
-      aria-label={themeLabel}
-      title={themeLabel}
-      onClick={() => setTheme(nextTheme)}
-    >
-      <Icon name={nextTheme === 'light' ? 'sun' : 'moon'} size={18} />
-    </button>
-  )
-
-  if (!status.ok) {
-    return (
-      <div className="app-centered">
-        {themeButton}
-        <ImportData
-          status={status}
-          importing={busy}
-          onPick={handlePick}
-          onDropFile={handleDropFile}
-        />
-      </div>
-    )
-  }
 
   return (
     <div className="app-shell">
       <header className="app-header">
-        <span className="app-tabs__brand">PukemonDeck</span>
-        <nav className="app-tabs" aria-label="主导航" role="tablist" onKeyDown={handleTabKeyDown}>
-          {APP_TABS.map((tab) => (
-            <button
-              key={tab}
-              id={`${tab}-tab`}
-              className={`app-tabs__tab${activeTab === tab ? ' app-tabs__tab--active' : ''}`}
-              type="button"
-              role="tab"
-              aria-selected={activeTab === tab}
-              aria-controls="app-panel"
-              tabIndex={activeTab === tab ? 0 : -1}
-              disabled={busy}
-              onClick={() => setActiveTab(tab)}
-            >
-              {TAB_LABELS[tab]}
-            </button>
-          ))}
-        </nav>
-        {themeButton}
-      </header>
-      <div
-        id="app-panel"
-        className="app-content"
-        role="tabpanel"
-        aria-labelledby={`${activeTab}-tab`}
-      >
-        {activeTab === 'settings' ? (
-          <Settings
-            status={status}
-            busy={busy}
-            importing={importing}
-            clearing={clearing}
-            onImport={handlePick}
-            onClear={handleClear}
-            imageStatus={imageStatus}
-            imageProgress={imageProgress}
-            imageImporting={imageBusy}
-            onImportImages={handleImagePick}
-            onCancelImages={handleImageCancel}
-          />
-        ) : activeTab === 'decks' ? (
-          <DeckBrowse onBrowseCards={() => setActiveTab('cards')} />
-        ) : activeTab === 'collections' ? (
-          <CollectionBrowse onAddCard={handleAddCard} />
-        ) : (
-          <CardBrowse
-            key={activeTab}
-            scope={activeTab === 'cards' ? undefined : activeTab}
-            title={TAB_LABELS[activeTab]}
-            onAddCard={handleAddCard}
-          />
-        )}
-      </div>
-      <div className="deck-feedback" role="status">
-        {addFeedback && (
-          <div className="deck-feedback__notice">
-            <Icon name={addFeedback.kind === 'added' ? 'check' : 'alert'} />
-            <span>{addFeedback.message}</span>
-            {addFeedback.kind === 'no-deck' && (
+        <button
+          className="button button--ghost app-header__home"
+          type="button"
+          onClick={() => setPage('home')}
+        >
+          <Icon name="arrow-left" />
+          首页
+        </button>
+        {showTabs ? (
+          <nav
+            className="app-tabs"
+            aria-label="卡牌浏览"
+            role="tablist"
+            onKeyDown={handleTabKeyDown}
+          >
+            {APP_TABS.map((tab) => (
               <button
-                className="button button--ghost"
+                key={tab}
+                id={`${tab}-tab`}
+                className={`app-tabs__tab${activeTab === tab ? ' app-tabs__tab--active' : ''}`}
                 type="button"
-                onClick={() => {
-                  setActiveTab('decks')
-                  setAddFeedback(null)
-                }}
+                role="tab"
+                aria-selected={activeTab === tab}
+                aria-controls="app-panel"
+                tabIndex={activeTab === tab ? 0 : -1}
+                disabled={busy}
+                onClick={() => setActiveTab(tab)}
               >
-                前往牌组
+                {TAB_LABELS[tab]}
               </button>
-            )}
-          </div>
+            ))}
+          </nav>
+        ) : (
+          <h1 className="app-header__title">{HOME_PAGES[page].label}</h1>
         )}
-      </div>
+        {page !== 'decks' && (
+          <button
+            className="icon-button theme-toggle"
+            type="button"
+            aria-label={themeLabel}
+            title={themeLabel}
+            onClick={() => setTheme(nextTheme)}
+          >
+            <Icon name={nextTheme === 'light' ? 'sun' : 'moon'} size={18} />
+          </button>
+        )}
+      </header>
+      <main className="app-content">{pageContent}</main>
+      {showTabs && (
+        <div className="deck-feedback" role="status">
+          {addFeedback && (
+            <div className="deck-feedback__notice">
+              <Icon name={addFeedback.kind === 'added' ? 'check' : 'alert'} />
+              <span>{addFeedback.message}</span>
+              {addFeedback.kind === 'no-deck' && (
+                <button
+                  className="button button--ghost"
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('decks')
+                    setAddFeedback(null)
+                  }}
+                >
+                  前往牌组
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
